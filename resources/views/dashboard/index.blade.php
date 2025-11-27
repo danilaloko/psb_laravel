@@ -7,8 +7,12 @@
     <!-- Header -->
     <div class="flex items-center justify-between">
         <div>
-            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Входящие письма</h1>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Управление задачами и письмами</p>
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
+                {{ ($isAdmin ?? false) ? 'Все задачи' : 'Входящие письма' }}
+            </h1>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {{ ($isAdmin ?? false) ? 'Администрирование всех задач системы' : 'Управление задачами и письмами' }}
+            </p>
         </div>
     </div>
     
@@ -99,7 +103,7 @@
                     <option value="archived" {{ request('status') == 'archived' ? 'selected' : '' }}>Архив</option>
                 </select>
             </div>
-            
+
             <div class="flex-1 min-w-[200px]">
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Приоритет</label>
                 <select name="priority" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500">
@@ -110,14 +114,30 @@
                     <option value="urgent" {{ request('priority') == 'urgent' ? 'selected' : '' }}>Срочный</option>
                 </select>
             </div>
-            
-            <div class="flex items-end">
+
+            @if($isAdmin ?? false)
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Исполнитель</label>
+                <select name="executor_id" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">Все исполнители</option>
+                    @foreach($executors as $executor)
+                    <option value="{{ $executor->id }}" {{ request('executor_id') == $executor->id ? 'selected' : '' }}>
+                        {{ $executor->name }}
+                    </option>
+                    @endforeach
+                </select>
+            </div>
+            @endif
+
+            <div class="flex items-end gap-2">
                 <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
                     Применить
                 </button>
-                <a href="{{ route('dashboard') }}" class="ml-2 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
-                    Сбросить
+                @if(request()->hasAny(['status', 'priority', 'executor_id']))
+                <a href="{{ route('dashboard') }}" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+                    Сбросить фильтры
                 </a>
+                @endif
             </div>
         </form>
     </div>
@@ -166,6 +186,10 @@
                                     <div class="mt-3 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
                                         @if($task->thread)
                                             <span>Поток: {{ $task->thread->title }}</span>
+                                            <span>•</span>
+                                        @endif
+                                        @if($isAdmin ?? false && $task->executor)
+                                            <span>Исполнитель: {{ $task->executor->name }}</span>
                                             <span>•</span>
                                         @endif
                                         @if($task->creator)

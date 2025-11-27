@@ -11,45 +11,81 @@ class DashboardController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
+        $isAdmin = $user->isAdmin();
 
-        $query = Task::with(['thread', 'creator'])->where('executor_id', $user->id);
+        // Базовый запрос для фильтрации
+        $baseQuery = Task::query();
+
+        // Для обычных пользователей показывать только их задачи
+        if (!$isAdmin) {
+            $baseQuery->where('executor_id', $user->id);
+        }
+
+        // Создаем клон для подсчета статистики
+        $statsQuery = clone $baseQuery;
+
+        // Применяем фильтры к основному запросу
+        $query = Task::with(['thread', 'creator', 'executor']);
+
+        // Для обычных пользователей показывать только их задачи
+        if (!$isAdmin) {
+            $query->where('executor_id', $user->id);
+        }
 
         // Фильтры
-        if ($request->has('status') && $request->status !== '') {
+        if ($request->filled('status')) {
             $query->where('status', $request->status);
+            $statsQuery->where('status', $request->status);
         }
 
-        if ($request->has('priority') && $request->priority !== '') {
+        if ($request->filled('priority')) {
             $query->where('priority', $request->priority);
+            $statsQuery->where('priority', $request->priority);
         }
 
-        $tasks = $query->orderBy('created_at', 'desc')->paginate(15);
+        // Фильтр по исполнителю для админов
+        if ($isAdmin && $request->filled('executor_id')) {
+            $query->where('executor_id', $request->executor_id);
+            $statsQuery->where('executor_id', $request->executor_id);
+        }
 
+        $tasks = $query->orderBy('created_at', 'desc')->paginate(15)->withQueryString();
+
+        // Статистика на основе отфильтрованных данных
         $stats = [
-            'total' => Task::where('executor_id', $user->id)->count(),
-            'new' => Task::where('executor_id', $user->id)->where('status', 'new')->count(),
-            'in_progress' => Task::where('executor_id', $user->id)->where('status', 'in_progress')->count(),
-            'completed' => Task::where('executor_id', $user->id)->where('status', 'completed')->count(),
-            'cancelled' => Task::where('executor_id', $user->id)->where('status', 'cancelled')->count(),
+            'total' => (clone $statsQuery)->count(),
+            'new' => (clone $statsQuery)->where('status', 'new')->count(),
+            'in_progress' => (clone $statsQuery)->where('status', 'in_progress')->count(),
+            'completed' => (clone $statsQuery)->where('status', 'completed')->count(),
+            'cancelled' => (clone $statsQuery)->where('status', 'cancelled')->count(),
         ];
 
-        return view('dashboard.index', compact('tasks', 'stats'));
+        // Список исполнителей для фильтра админов
+        $executors = $isAdmin ? \App\Models\User::where('role', 'user')->get() : collect();
+
+        return view('dashboard.index', compact('tasks', 'stats', 'executors', 'isAdmin'));
     }
 
     public function show(Task $task)
     {
-        if ($task->executor_id !== Auth::id()) {
+        $user = Auth::user();
+
+        // Обычные пользователи могут видеть только свои задачи
+        if (!$user->isAdmin() && $task->executor_id !== $user->id) {
             abort(403);
         }
 
-        $task->load(['thread', 'creator', 'thread.emails']);
+        $task->load(['thread', 'creator', 'executor', 'thread.emails']);
 
         return view('dashboard.show', compact('task'));
     }
 
     public function updateStatus(Request $request, Task $task)
     {
-        if ($task->executor_id !== Auth::id()) {
+        $user = Auth::user();
+
+        // Обычные пользователи могут обновлять только свои задачи
+        if (!$user->isAdmin() && $task->executor_id !== $user->id) {
             abort(403);
         }
 
