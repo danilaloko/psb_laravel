@@ -13,7 +13,7 @@
     </a>
     
     <!-- Task Card -->
-    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
         <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
             <div class="flex items-start justify-between">
                 <div class="flex-1">
@@ -48,7 +48,7 @@
             </div>
         </div>
         
-        <div class="px-6 py-6">
+        <div class="px-6 py-6" style="word-break: break-word; overflow-wrap: break-word;">
             <!-- Task Info -->
             <div class="mb-6 space-y-3">
                 @if($task->thread)
@@ -94,7 +94,7 @@
             <!-- Content -->
             <div class="prose dark:prose-invert max-w-none">
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">Содержание:</h3>
-                <div class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{{ $task->content }}</div>
+                <div class="text-gray-700 dark:text-gray-300 break-words" style="word-break: break-word; overflow-wrap: break-word; white-space: pre-wrap; word-wrap: break-word;">{{ $task->content }}</div>
             </div>
             
             <!-- Related Emails -->
@@ -103,32 +103,25 @@
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Связанные письма в потоке:</h3>
                 <div class="space-y-3">
                     @foreach($task->thread->emails as $email)
-                    <div class="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600/50 transition-colors"
-                         data-subject="{{ htmlspecialchars($email->subject) }}"
-                         data-from-name="{{ htmlspecialchars($email->from_name) }}"
-                         data-from-address="{{ htmlspecialchars($email->from_address) }}"
-                         data-date="{{ $email->received_at->format('d.m.Y H:i') }}"
-                         data-content="{{ htmlspecialchars($email->content) }}"
-                         onclick="openEmailModal(this)">
+                    <a href="{{ route('dashboard.email.show', $email) }}" class="block p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600/50 transition-colors">
                         <div class="flex items-start justify-between">
-                            <div class="flex-1">
-                                <h4 class="font-medium text-gray-900 dark:text-white">{{ $email->subject }}</h4>
-                                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                            <div class="flex-1 min-w-0">
+                                <h4 class="font-medium text-gray-900 dark:text-white break-words" style="word-break: break-word; overflow-wrap: break-word;">{{ $email->subject }}</h4>
+                                <p class="text-sm text-gray-600 dark:text-gray-400 mt-1 break-words" style="word-break: break-word; overflow-wrap: break-word;">
                                     От: {{ $email->from_name }} ({{ $email->from_address }}) •
                                     {{ $email->received_at->format('d.m.Y H:i') }}
                                 </p>
-                                <p class="text-sm text-gray-700 dark:text-gray-300 mt-2 line-clamp-2">
+                                <p class="text-sm text-gray-700 dark:text-gray-300 mt-2 line-clamp-2 break-words" style="word-break: break-word; overflow-wrap: break-word;">
                                     {{ Str::limit($email->content, 200) }}
                                 </p>
                             </div>
                             <div class="ml-3">
                                 <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                                 </svg>
                             </div>
                         </div>
-                    </div>
+                    </a>
                     @endforeach
                 </div>
             </div>
@@ -154,68 +147,5 @@
         </div>
     </div>
 </div>
-
-<!-- Email Modal -->
-<div id="emailModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50 flex items-center justify-center">
-    <div class="p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white dark:bg-gray-800 max-h-[90vh] overflow-y-auto">
-        <div class="flex justify-between items-center mb-4">
-            <h3 id="modalSubject" class="text-lg font-semibold text-gray-900 dark:text-white"></h3>
-            <button onclick="closeEmailModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
-        </div>
-
-        <div class="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
-            <div id="modalSender" class="text-sm text-gray-600 dark:text-gray-400 mb-2"></div>
-            <div id="modalDate" class="text-sm text-gray-500 dark:text-gray-500"></div>
-        </div>
-
-        <div id="modalContent" class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap max-h-96 overflow-y-auto"></div>
-    </div>
-</div>
-
-<script>
-function openEmailModal(element) {
-    const subject = decodeHtmlEntities(element.getAttribute('data-subject'));
-    const fromName = decodeHtmlEntities(element.getAttribute('data-from-name'));
-    const fromAddress = decodeHtmlEntities(element.getAttribute('data-from-address'));
-    const date = element.getAttribute('data-date');
-    const content = decodeHtmlEntities(element.getAttribute('data-content'));
-
-    document.getElementById('modalSubject').textContent = subject;
-    document.getElementById('modalSender').innerHTML = '<strong>От:</strong> ' + fromName + ' (' + fromAddress + ')';
-    document.getElementById('modalDate').innerHTML = '<strong>Дата:</strong> ' + date;
-    document.getElementById('modalContent').textContent = content;
-    document.getElementById('emailModal').classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
-}
-
-function decodeHtmlEntities(text) {
-    const textarea = document.createElement('textarea');
-    textarea.innerHTML = text;
-    return textarea.value;
-}
-
-function closeEmailModal() {
-    document.getElementById('emailModal').classList.add('hidden');
-    document.body.style.overflow = 'auto';
-}
-
-// Close modal when clicking outside
-document.getElementById('emailModal').addEventListener('click', function(e) {
-    if (e.target === this) {
-        closeEmailModal();
-    }
-});
-
-// Close modal with Escape key
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && !document.getElementById('emailModal').classList.contains('hidden')) {
-        closeEmailModal();
-    }
-});
-</script>
 @endsection
 

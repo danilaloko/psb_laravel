@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Task;
+use App\Models\Email;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -96,5 +97,24 @@ class DashboardController extends Controller
         $task->update(['status' => $request->status]);
 
         return redirect()->back()->with('success', 'Статус задачи обновлен');
+    }
+
+    public function showEmail(Email $email)
+    {
+        $user = Auth::user();
+
+        // Проверяем доступ к письму через задачу
+        $task = Task::whereHas('thread', function($query) use ($email) {
+            $query->where('id', $email->thread_id);
+        })->where('executor_id', $user->id)->first();
+
+        // Обычные пользователи могут видеть только письма из своих задач
+        if (!$user->isAdmin() && !$task) {
+            abort(403);
+        }
+
+        $email->load(['thread']);
+
+        return view('dashboard.email', compact('email'));
     }
 }
