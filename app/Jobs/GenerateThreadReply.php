@@ -22,10 +22,12 @@ class GenerateThreadReply implements ShouldQueue
     public $timeout = 120; // Таймаут выполнения job - 2 минуты
 
     protected Thread $thread;
+    protected ?string $indexId;
 
-    public function __construct(Thread $thread)
+    public function __construct(Thread $thread, ?string $indexId = null)
     {
         $this->thread = $thread;
+        $this->indexId = $indexId;
         $this->onQueue('ai-processing'); // Специальная очередь для ИИ задач
     }
 
@@ -40,18 +42,22 @@ class GenerateThreadReply implements ShouldQueue
             // Валидируем thread
             $this->validateThread();
 
+            // Выполняем поиск по Vector Store (если указан индекс)
+            $searchResults = $this->performVectorSearch();
+            $searchContext = $this->formatSearchResults($searchResults);
+
             // Получаем аналитику для всех писем в треде
             $analyses = $this->getThreadAnalyses();
-            
+
             // Формируем контекст аналитики
             $analysisContext = $this->getAnalysisContext($analyses);
 
             // Получаем модель из конфига
             $modelConfig = config('ai-models.yandex.' . config('ai-models.default_model'));
 
-            // Формируем промпт с учетом аналитики
+            // Формируем промпт с учетом аналитики и результатов поиска
             $threadContext = $this->thread->getThreadContext();
-            $prompt = $this->buildPrompt($threadContext, $analysisContext);
+            $prompt = $this->buildPrompt($threadContext, $analysisContext, $searchContext);
 
             // Отправляем запрос в Yandex AI Studio
             $response = $aiService->generateCompletion($prompt, $modelConfig);
@@ -62,15 +68,17 @@ class GenerateThreadReply implements ShouldQueue
             // Парсим ответ от Yandex AI
             $parsedResponse = $this->parseYandexResponse($response);
 
-            // Сохраняем результат с информацией об использованной аналитике
-            $generation = $this->saveGeneration($parsedResponse, $processingTime, $modelConfig, $response, $analyses);
+            // Сохраняем результат с информацией об использованной аналитике и поиске
+            $generation = $this->saveGeneration($parsedResponse, $processingTime, $modelConfig, $response, $analyses, $searchResults);
 
             Log::info("Thread {$this->thread->id} reply generated successfully", [
                 'processing_time' => $processingTime,
                 'model' => $modelConfig['name'],
                 'generation_id' => $generation->id,
                 'analyses_used' => $analyses->count(),
-                'emails_with_analysis' => $analyses->pluck('email_id')->unique()->count()
+                'emails_with_analysis' => $analyses->pluck('email_id')->unique()->count(),
+                'search_index_used' => $this->indexId,
+                'search_results_count' => $searchResults ? count($searchResults) : 0
             ]);
 
         } catch (Throwable $e) {
@@ -99,13 +107,125 @@ class GenerateThreadReply implements ShouldQueue
         }
 
         // Используем уже загруженные emails если они есть
-        $emailsCount = $this->thread->relationLoaded('emails') 
-            ? $this->thread->emails->count() 
+        $emailsCount = $this->thread->relationLoaded('emails')
+            ? $this->thread->emails->count()
             : $this->thread->emails()->count();
 
         if ($emailsCount === 0) {
             throw new \InvalidArgumentException("Thread must contain at least one email");
         }
+    }
+
+    /**
+     * Выполнить поиск по Vector Store индексу
+     */
+    protected function performVectorSearch(): ?array
+    {
+        if (!$this->indexId) {
+            Log::info("No search index specified for thread {$this->thread->id}");
+            return null;
+        }
+
+        try {
+            // Формируем поисковый запрос на основе контекста треда
+            $searchQuery = $this->buildSearchQuery();
+
+            Log::info("Performing vector search for thread {$this->thread->id}", [
+                'index_id' => $this->indexId,
+                'query' => $searchQuery
+            ]);
+
+            $searchResults = app(YandexAIService::class)->searchVectorStore($this->indexId, $searchQuery, 5);
+
+            Log::info("Vector search completed for thread {$this->thread->id}", [
+                'results_count' => count($searchResults)
+            ]);
+
+            return $searchResults;
+
+        } catch (\Exception $e) {
+            Log::error("Vector search failed for thread {$this->thread->id}", [
+                'index_id' => $this->indexId,
+                'error' => $e->getMessage()
+            ]);
+
+            // Возвращаем null при ошибке поиска, чтобы продолжить генерацию без поиска
+            return null;
+        }
+    }
+
+    /**
+     * Сформировать поисковый запрос на основе контекста треда
+     */
+    protected function buildSearchQuery(): string
+    {
+        // Берем последнее письмо в треде как основу для поиска
+        $latestEmail = $this->thread->emails->sortByDesc('received_at')->first();
+
+        if (!$latestEmail) {
+            return '';
+        }
+
+        // Используем тему и краткое содержание для формирования запроса
+        $query = $latestEmail->subject;
+
+        // Если есть анализ последнего письма, используем ключевые моменты
+        $analysis = Generation::where('email_id', $latestEmail->id)
+            ->analyses()
+            ->successful()
+            ->latest()
+            ->first();
+
+        if ($analysis && isset($analysis->response['summary'])) {
+            $query = $analysis->response['summary'] . ' ' . $query;
+        }
+
+        // Ограничиваем длину запроса
+        return substr($query, 0, 200);
+    }
+
+    /**
+     * Форматировать результаты поиска для включения в промпт
+     */
+    protected function formatSearchResults(?array $searchResults): string
+    {
+        if (!$searchResults || !isset($searchResults['data']) || empty($searchResults['data'])) {
+            return '';
+        }
+
+        $formattedResults = [];
+
+        foreach ($searchResults['data'] as $result) {
+            $content = $result['content'] ?? [];
+
+            if (empty($content) || !isset($content[0]['text'])) {
+                continue;
+            }
+
+            $filename = $result['filename'] ?? 'неизвестный файл';
+            $score = $result['score'] ?? 0;
+            $text = $content[0]['text'];
+
+            // Обрабатываем UTF-8 символы
+            $text = mb_convert_encoding($text, 'UTF-8', 'UTF-8');
+            $filename = mb_convert_encoding($filename, 'UTF-8', 'UTF-8');
+
+            // Ограничиваем длину текста для каждого результата
+            $truncatedText = mb_strlen($text) > 1000 ? mb_substr($text, 0, 1000) . '...' : $text;
+
+            $formattedResults[] = "=== Результат поиска ===\n" .
+                                "Файл: {$filename}\n" .
+                                "Релевантность: " . round($score * 100, 2) . "%\n\n" .
+                                "Содержание:\n{$truncatedText}";
+        }
+
+        if (empty($formattedResults)) {
+            return '';
+        }
+
+        return "=== Результаты поиска по базе знаний ===\n\n" .
+               implode("\n\n---\n\n", $formattedResults) . "\n\n" .
+               "Используй эту информацию для формирования более точного и информативного ответа.\n\n";
     }
 
     protected function getThreadAnalyses()
@@ -242,18 +362,23 @@ class GenerateThreadReply implements ShouldQueue
         return implode("\n\n", $contextParts);
     }
 
-    protected function buildPrompt(string $threadContext, string $analysisContext = ''): string
+    protected function buildPrompt(string $threadContext, string $analysisContext = '', string $searchContext = ''): string
     {
         $template = config('ai-models.prompts.thread_reply.user_template');
 
         // Если аналитика отсутствует, используем пустую строку
-        $analysisSection = $analysisContext 
+        $analysisSection = $analysisContext
             ? "\n\n=== Аналитика писем ===\n{$analysisContext}\n"
             : "\n\nПримечание: Аналитика для писем не доступна. Используй только контекст переписки.\n";
 
+        // Добавляем результаты поиска если они есть
+        $searchSection = $searchContext
+            ? "\n\n{$searchContext}"
+            : "";
+
         return str_replace(
             ['{thread_context}', '{analysis_context}', '{response_format}'],
-            [$threadContext, $analysisSection, $this->getResponseFormat()],
+            [$threadContext, $analysisSection . $searchSection, $this->getResponseFormat()],
             $template
         );
     }
@@ -265,16 +390,19 @@ class GenerateThreadReply implements ShouldQueue
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     }
 
-    protected function saveGeneration(array $parsedResponse, float $processingTime, array $modelConfig, array $apiResponse, $analyses = null): Generation
+    protected function saveGeneration(array $parsedResponse, float $processingTime, array $modelConfig, array $apiResponse, $analyses = null, ?array $searchResults = null): Generation
     {
         // Формируем контекст аналитики для сохранения в промпте
         $analysisContext = '';
         if ($analyses && $analyses->isNotEmpty()) {
             $analysisContext = $this->getAnalysisContext($analyses);
         }
-        
+
+        // Формируем контекст поиска
+        $searchContext = $this->formatSearchResults($searchResults);
+
         $threadContext = $this->thread->getThreadContext();
-        $prompt = $this->buildPrompt($threadContext, $analysisContext);
+        $prompt = $this->buildPrompt($threadContext, $analysisContext, $searchContext);
 
         // Формируем метаданные об использованной аналитике
         $analysisMetadata = [];
@@ -283,6 +411,26 @@ class GenerateThreadReply implements ShouldQueue
                 'analyses_used' => $analyses->count(),
                 'email_ids_with_analysis' => $analyses->pluck('email_id')->unique()->values()->toArray(),
                 'analysis_generation_ids' => $analyses->pluck('id')->values()->toArray()
+            ];
+        }
+
+        // Формируем метаданные о поиске
+        $searchMetadata = [];
+        if ($this->indexId && $searchResults !== null && isset($searchResults['data'])) {
+            $searchMetadata = [
+                'vector_search' => [
+                    'index_id' => $this->indexId,
+                    'query' => $this->buildSearchQuery(),
+                    'results_count' => count($searchResults['data']),
+                    'results' => array_map(function ($result) {
+                        return [
+                            'filename' => $result['filename'] ?? null,
+                            'score' => $result['score'] ?? 0,
+                            'file_id' => $result['file_id'] ?? null,
+                            'content_length' => isset($result['content'][0]['text']) ? strlen($result['content'][0]['text']) : 0
+                        ];
+                    }, $searchResults['data'])
+                ]
             ];
         }
 
@@ -317,7 +465,10 @@ class GenerateThreadReply implements ShouldQueue
                     'model_version' => $apiResponse['modelVersion'] ?? null,
                     'finish_reason' => $apiResponse['alternatives'][0]['status'] ?? null
                 ]
-            ], $analysisMetadata ? ['analysis_metadata' => $analysisMetadata] : [])
+            ], array_merge(
+                $analysisMetadata ? ['analysis_metadata' => $analysisMetadata] : [],
+                $searchMetadata ? ['search_metadata' => $searchMetadata] : []
+            ))
         ]);
     }
 

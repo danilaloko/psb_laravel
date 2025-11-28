@@ -174,6 +174,62 @@ class YandexAIService
     }
 
     /**
+     * Выполнить поиск по индексу Vector Store
+     *
+     * @param string $indexId Идентификатор поискового индекса
+     * @param string $query Поисковый запрос
+     * @param int $maxResults Максимальное количество результатов (по умолчанию 5)
+     * @return array Массив результатов поиска
+     * @throws \Exception При ошибке API
+     */
+    public function searchVectorStore(string $indexId, string $query, int $maxResults = 5): array
+    {
+        if (!$this->iamToken || !$this->folderId) {
+            throw new \InvalidArgumentException('Yandex Cloud credentials not configured');
+        }
+
+        $url = "https://rest-assistant.api.cloud.yandex.net/v1/vector_stores/{$indexId}/search";
+
+        Log::info('Searching Vector Store', [
+            'index_id' => $indexId,
+            'query' => $query,
+            'max_results' => $maxResults
+        ]);
+
+        $response = Http::timeout(60)
+            ->withHeaders([
+                'Authorization' => "Bearer {$this->iamToken}",
+                'OpenAI-Project' => $this->folderId,
+                'Content-Type' => 'application/json'
+            ])
+            ->post($url, [
+                'query' => $query,
+                'max_num_results' => $maxResults
+            ]);
+
+        if (!$response->successful()) {
+            Log::error('Vector Store search failed', [
+                'index_id' => $indexId,
+                'query' => $query,
+                'status' => $response->status(),
+                'response_body' => $response->body()
+            ]);
+
+            throw new \Exception("Vector Store search failed: {$response->status()} - {$response->body()}");
+        }
+
+        $result = $response->json();
+
+        Log::info('Vector Store search completed', [
+            'index_id' => $indexId,
+            'query' => $query,
+            'results_count' => count($result ?? [])
+        ]);
+
+        return $result ?? [];
+    }
+
+    /**
      * Получить информацию об конкретном индексе
      */
     public function getSearchIndex(string $indexId): ?array
