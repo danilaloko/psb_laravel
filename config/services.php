@@ -40,4 +40,14 @@ return [
         'folder_id' => env('YANDEX_FOLDER_ID'),
     ],
 
+    'imap' => [
+        'host' => env('MAIL_IMAP_HOST'),
+        'port' => env('MAIL_IMAP_PORT', 993),
+        'encryption' => env('MAIL_IMAP_ENCRYPTION', 'ssl'),
+        'username' => env('MAIL_IMAP_USERNAME'),
+        'password' => env('MAIL_IMAP_PASSWORD'),
+        'fetch_limit' => env('MAIL_FETCH_LIMIT', 50),
+        'fetch_period_minutes' => env('MAIL_FETCH_PERIOD_MINUTES', 60),
+    ],
+
 ];

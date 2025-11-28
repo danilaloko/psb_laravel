@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Email extends Model
 {
     protected $fillable = [
+        'message_id',
         'subject',
         'content',
         'thread_id',

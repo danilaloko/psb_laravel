@@ -47,11 +47,30 @@ class EmailController extends Controller
     // Метод для обработки IMAP входящих писем
     public function processIncoming(Request $request)
     {
-        // Логика получения писем из IMAP или другого источника
-        // Пока заглушка - в будущем здесь будет IMAP клиент
+        $minutes = $request->input('minutes', 60);
 
-        return response()->json([
-            'message' => 'Метод processIncoming пока не реализован'
-        ]);
+        try {
+            $fetcher = new \App\Services\EmailFetcherService();
+            $result = $fetcher->fetchRecentEmails($minutes);
+
+            if (is_array($result)) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Обработка писем завершена',
+                    'data' => $result
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Ошибка при получении писем'
+                ], 500);
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Произошла ошибка: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }
