@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'yandex' => [
+        'iam_token' => env('YANDEX_IAM_TOKEN'),
+        'folder_id' => env('YANDEX_FOLDER_ID'),
+    ],
+
 ];

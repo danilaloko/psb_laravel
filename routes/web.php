@@ -3,6 +3,8 @@
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\EmailController;
+use App\Http\Controllers\AIAnalysisController;
 use Illuminate\Support\Facades\Route;
 
 // Главная страница - редирект на логин
@@ -25,4 +27,14 @@ Route::middleware('auth')->group(function () {
 // Админ панель
 Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
+
+    // Email management
+    Route::post('/emails', [EmailController::class, 'store'])->name('emails.store');
+    Route::post('/emails/process-incoming', [EmailController::class, 'processIncoming'])->name('emails.process-incoming');
+
+    // AI Analysis
+    Route::post('/emails/{email}/analyze', [AIAnalysisController::class, 'processEmail'])->name('emails.analyze');
+    Route::get('/emails/{email}/analysis', [AIAnalysisController::class, 'showAnalysis'])->name('emails.analysis');
+    Route::get('/emails/{email}/generations', [AIAnalysisController::class, 'getAllGenerations'])->name('emails.generations');
+    Route::get('/ai/stats', [AIAnalysisController::class, 'getStats'])->name('ai.stats');
 });
