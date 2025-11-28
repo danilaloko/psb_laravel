@@ -196,8 +196,11 @@ class TaskController extends Controller
         }
 
         try {
+            // Загружаем thread с отношениями перед dispatch для корректной сериализации
+            $thread = $task->thread()->with('emails')->firstOrFail();
+            
             // Запускаем генерацию ответа
-            \App\Jobs\GenerateThreadReply::dispatch($task->thread);
+            \App\Jobs\GenerateThreadReply::dispatch($thread);
 
             return response()->json([
                 'success' => true,

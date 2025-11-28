@@ -2,9 +2,6 @@
 
 namespace App\Jobs;
 
-use App\Events\ThreadReplyGenerationCompleted;
-use App\Events\ThreadReplyGenerationFailed;
-use App\Events\ThreadReplyGenerationStarted;
 use App\Models\Generation;
 use App\Models\Thread;
 use App\Services\YandexAIService;
@@ -36,8 +33,8 @@ class GenerateThreadReply implements ShouldQueue
     {
         $startTime = microtime(true);
 
-        // Отправляем событие начала обработки
-        $this->broadcastReplyStatus('processing');
+        // Перезагружаем thread с отношениями для корректной работы после десериализации
+        $this->thread = $this->thread->load('emails');
 
         try {
             // Валидируем thread
@@ -61,12 +58,10 @@ class GenerateThreadReply implements ShouldQueue
             // Сохраняем результат
             $generation = $this->saveGeneration($parsedResponse, $processingTime, $modelConfig, $response);
 
-            // Отправляем событие успешного завершения
-            $this->broadcastReplyStatus('completed', $generation);
-
             Log::info("Thread {$this->thread->id} reply generated successfully", [
                 'processing_time' => $processingTime,
-                'model' => $modelConfig['name']
+                'model' => $modelConfig['name'],
+                'generation_id' => $generation->id
             ]);
 
         } catch (Throwable $e) {
@@ -81,16 +76,11 @@ class GenerateThreadReply implements ShouldQueue
 
     public function failed(Throwable $exception): void
     {
-        // Отправляем событие об ошибке
-        $this->broadcastReplyStatus('error', null, $exception->getMessage());
-
         // Обработка окончательного неудачного выполнения
         Log::critical("Thread {$this->thread->id} reply generation failed permanently", [
-            'error' => $exception->getMessage()
+            'error' => $exception->getMessage(),
+            'attempts' => $this->attempts()
         ]);
-
-        // Можно отправить уведомление администратору
-        // или пометить thread для ручной обработки
     }
 
     protected function validateThread(): void
@@ -99,7 +89,12 @@ class GenerateThreadReply implements ShouldQueue
             throw new \InvalidArgumentException("Thread does not exist");
         }
 
-        if ($this->thread->emails()->count() === 0) {
+        // Используем уже загруженные emails если они есть
+        $emailsCount = $this->thread->relationLoaded('emails') 
+            ? $this->thread->emails->count() 
+            : $this->thread->emails()->count();
+
+        if ($emailsCount === 0) {
             throw new \InvalidArgumentException("Thread must contain at least one email");
         }
     }
@@ -229,30 +224,4 @@ class GenerateThreadReply implements ShouldQueue
         ];
     }
 
-    protected function broadcastReplyStatus(string $status, ?Generation $generation = null, ?string $errorMessage = null): void
-    {
-        switch ($status) {
-            case 'processing':
-                broadcast(new ThreadReplyGenerationStarted($this->thread->id, $status));
-                break;
-
-            case 'completed':
-                $generationData = null;
-                if ($generation) {
-                    $generationData = [
-                        'reply' => $generation->response['reply'] ?? '',
-                        'processing_time' => $generation->processing_time,
-                        'cost' => $generation->getCost(),
-                        'model' => $generation->getModelName(),
-                        'tokens' => $generation->getTotalTokens(),
-                    ];
-                }
-                broadcast(new ThreadReplyGenerationCompleted($this->thread->id, $status, $generationData));
-                break;
-
-            case 'error':
-                broadcast(new ThreadReplyGenerationFailed($this->thread->id, $status, $errorMessage));
-                break;
-        }
-    }
 }

@@ -58,7 +58,12 @@ class Thread extends Model
 
     public function getThreadContext(): string
     {
-        $emails = $this->emails()->orderBy('received_at')->get();
+        // Используем уже загруженные emails если они есть, иначе загружаем
+        if ($this->relationLoaded('emails')) {
+            $emails = $this->emails->sortBy('received_at');
+        } else {
+            $emails = $this->emails()->orderBy('received_at')->get();
+        }
 
         $context = [];
         foreach ($emails as $email) {

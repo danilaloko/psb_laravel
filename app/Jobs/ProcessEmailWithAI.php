@@ -2,7 +2,6 @@
 
 namespace App\Jobs;
 
-use App\Events\AnalysisStatusUpdated;
 use App\Models\Email;
 use App\Models\Generation;
 use App\Services\YandexAIService;
@@ -34,9 +33,6 @@ class ProcessEmailWithAI implements ShouldQueue
     {
         $startTime = microtime(true);
 
-        // Отправляем событие начала обработки
-        $this->broadcastAnalysisStatus('processing');
-
         try {
             // Получаем модель из конфига
             $modelConfig = config('ai-models.yandex.' . config('ai-models.default_model'));
@@ -56,12 +52,10 @@ class ProcessEmailWithAI implements ShouldQueue
             // Сохраняем результат
             $generation = $this->saveGeneration($parsedResponse, $processingTime, $modelConfig, $response);
 
-            // Отправляем событие успешного завершения
-            $this->broadcastAnalysisStatus('completed', $generation);
-
             Log::info("Email {$this->email->id} processed successfully", [
                 'processing_time' => $processingTime,
-                'model' => $modelConfig['name']
+                'model' => $modelConfig['name'],
+                'generation_id' => $generation->id
             ]);
 
         } catch (Throwable $e) {
@@ -76,16 +70,11 @@ class ProcessEmailWithAI implements ShouldQueue
 
     public function failed(Throwable $exception): void
     {
-        // Отправляем событие об ошибке
-        $this->broadcastAnalysisStatus('error');
-
         // Обработка окончательного неудачного выполнения
         Log::critical("Email {$this->email->id} processing failed permanently", [
-            'error' => $exception->getMessage()
+            'error' => $exception->getMessage(),
+            'attempts' => $this->attempts()
         ]);
-
-        // Можно отправить уведомление администратору
-        // или пометить email для ручной обработки
     }
 
     protected function buildPrompt(string $emailContent): string
@@ -226,32 +215,4 @@ class ProcessEmailWithAI implements ShouldQueue
         ];
     }
 
-    protected function broadcastAnalysisStatus(string $status, ?Generation $generation = null): void
-    {
-        // Находим task через email -> thread -> tasks
-        $task = $this->email->thread->tasks()->latest()->first();
-
-        if (!$task) {
-            Log::warning("No task found for email {$this->email->id}");
-            return;
-        }
-
-        $analysisData = null;
-        if ($generation && $status === 'completed') {
-            $analysisData = [
-                'summary' => $generation->response['summary'] ?? '',
-                'priority' => $generation->response['priority'] ?? 'medium',
-                'category' => $generation->response['category'] ?? '',
-                'sentiment' => $generation->response['sentiment'] ?? 'neutral',
-                'action_required' => $generation->response['action_required'] ?? false,
-                'suggested_response' => $generation->response['suggested_response'] ?? '',
-                'processing_time' => $generation->processing_time,
-                'cost' => $generation->getCost(),
-                'model' => $generation->getModelName(),
-                'tokens' => $generation->getTotalTokens(),
-            ];
-        }
-
-        broadcast(new AnalysisStatusUpdated($task->id, $status, $analysisData));
-    }
 }

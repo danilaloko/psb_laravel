@@ -326,9 +326,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.status === 'processing') {
                     startReplyPolling();
                 }
+            } else {
+                // Убеждаемся что кнопка разблокирована если генерация не запускалась
+                setGeneratingReplyState(false);
             }
         } catch (error) {
             console.error('Error loading reply status:', error);
+            // При ошибке тоже разблокируем кнопку
+            setGeneratingReplyState(false);
         }
     }
 
@@ -475,8 +480,6 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        setGeneratingReplyState(status === 'processing');
-
         let statusText = '';
         let statusClass = '';
 
@@ -484,10 +487,12 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'processing':
                 statusText = '🔄 Генерация ответа...';
                 statusClass = 'text-blue-600 dark:text-blue-400';
+                setGeneratingReplyState(true);
                 break;
             case 'completed':
                 statusText = `✅ Ответ сгенерирован (${replyData?.processing_time}s, ${replyData?.cost}₽)`;
                 statusClass = 'text-green-600 dark:text-green-400';
+                setGeneratingReplyState(false);
                 if (replyData) {
                     showReplyResults(replyData);
                 }
@@ -505,14 +510,17 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'not_started':
                 statusText = '📝 Генерация не запускалась';
                 statusClass = 'text-gray-600 dark:text-gray-400';
+                setGeneratingReplyState(false);
                 break;
             case 'no_thread':
                 statusText = '📁 У задачи нет потока';
                 statusClass = 'text-gray-600 dark:text-gray-400';
+                setGeneratingReplyState(false);
                 break;
             default:
                 statusText = 'Неизвестный статус';
                 statusClass = 'text-gray-600 dark:text-gray-400';
+                setGeneratingReplyState(false);
         }
 
         replyStatus.innerHTML = `<span class="${statusClass}">${statusText}</span>`;
