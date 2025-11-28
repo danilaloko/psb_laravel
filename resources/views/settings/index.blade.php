@@ -2,6 +2,27 @@
 
 @section('title', 'Настройки')
 
+@section('styles')
+<style>
+.search-index-card {
+    transition: all 0.2s ease;
+}
+.search-index-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+.index-status-ready {
+    background-color: #10b981;
+}
+.index-status-creating {
+    background-color: #f59e0b;
+}
+.index-status-error {
+    background-color: #ef4444;
+}
+</style>
+@endsection
+
 @section('content')
 
 <div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 py-12 px-4 sm:px-6 lg:px-8">
@@ -112,88 +133,110 @@
 
         </div>
 
-        <!-- BLOCK 2 — ИЗМЕНЯЕМАЯ ФОРМА -->
-
-        <form method="POST" action="#" class="space-y-6">
-            @csrf
+        <!-- BLOCK 2 — ПОИСКОВЫЕ ИНДЕКСЫ -->
 
         <div class="rounded-lg bg-white dark:bg-gray-800 shadow-xl p-8 space-y-6">
 
-            <!-- Title Field -->
+            <div class="flex items-center justify-between">
 
-            <div>
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white">
 
-                <label for="title_field" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Поисковые индексы Yandex AI Studio
 
-                    Название
+                </h3>
 
-                </label>
+                <span class="text-sm text-gray-500 dark:text-gray-400">
 
-                <input id="title_field"
-
-                       type="text"
-
-                       name="title"
-
-                       value=""
-
-                       class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600
-
-                              text-gray-900 dark:text-white bg-white dark:bg-gray-700
-
-                              rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-
-                       placeholder="Введите название">
-
-            </div>
-
-            <!-- Upload Button -->
-
-            <div class="flex items-center space-x-3">
-
-                <button type="button"
-
-                        class="w-10 h-10 flex items-center justify-center rounded-full bg-blue-600 hover:bg-blue-700
-
-                               text-white text-xl font-bold shadow focus:outline-none">
-
-                    +
-
-                </button>
-
-                <span class="text-sm text-gray-600 dark:text-gray-400">
-
-                    Добавить файл или документ
+                    {{ count($searchIndexes) }} индексов доступно
 
                 </span>
 
             </div>
 
-            <!-- Big Textarea -->
+            @if(count($searchIndexes) > 0)
 
-            <div>
+                <div class="grid gap-4 md:grid-cols-2">
 
-                <label for="big_text" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    @foreach($searchIndexes as $index)
 
-                    Описание / Примечание
+                        <div class="search-index-card rounded-lg border border-gray-200 dark:border-gray-600 p-4 bg-gray-50 dark:bg-gray-700">
 
-                </label>
+                            <div class="flex items-start justify-between">
 
-                <textarea id="big_text"
+                                <div class="flex-1">
 
-                          name="description"
+                                    <div class="flex items-center space-x-2">
 
-                          rows="6"
+                                        <h4 class="text-sm font-medium text-gray-900 dark:text-white">
 
-                          class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600
+                                            {{ $index['name'] ?? 'Без названия' }}
 
-                                 text-gray-900 dark:text-white bg-white dark:bg-gray-700 rounded-lg
+                                        </h4>
 
-                                 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                                                   {{ $index['status'] === 'READY' ? 'index-status-ready' :
+                                                      ($index['status'] === 'CREATING' ? 'index-status-creating' : 'index-status-error') }}
+                                                   text-white">
 
-                          placeholder="Введите содержание письма..."></textarea>
+                                            {{ $index['status'] ?? 'UNKNOWN' }}
 
-            </div>
+                                        </span>
+
+                                    </div>
+
+                                    <p class="mt-1 text-xs text-gray-600 dark:text-gray-400">
+
+                                        ID: {{ $index['id'] }}
+
+                                    </p>
+
+                                    <p class="mt-2 text-sm text-gray-700 dark:text-gray-300">
+
+                                        {{ $index['description'] ?: 'Описание не указано' }}
+
+                                    </p>
+
+                                    @if($index['created_at'])
+
+                                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-500">
+
+                                            Создан: {{ \Carbon\Carbon::parse($index['created_at'])->format('d.m.Y H:i') }}
+
+                                        </p>
+
+                                    @endif
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    @endforeach
+
+                </div>
+
+            @else
+
+                <div class="text-center py-8">
+
+                    <div class="text-gray-400 dark:text-gray-500 text-4xl mb-4">📄</div>
+
+                    <p class="text-gray-600 dark:text-gray-400">
+
+                        Нет доступных поисковых индексов
+
+                    </p>
+
+                    <p class="text-sm text-gray-500 dark:text-gray-500 mt-2">
+
+                        Индексы должны быть созданы в Yandex AI Studio
+
+                    </p>
+
+                </div>
+
+            @endif
 
         </div>
 
@@ -266,24 +309,6 @@
             </div>
 
         </div>
-
-        <div>
-
-            <button type="submit"
-
-                    class="group relative w-full flex justify-center py-2.5 px-4 border border-transparent
-
-                            text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700
-
-                            focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
-
-                Сохранить
-
-            </button>
-
-        </div>
-
-        </form>
 
     </div>
 

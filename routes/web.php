@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\EmailController;
 use App\Http\Controllers\AIAnalysisController;
 use App\Http\Controllers\TaskController;
+use App\Http\Controllers\SettingsController;
 use Illuminate\Support\Facades\Route;
 
 // Главная страница - редирект на логин
@@ -41,9 +42,7 @@ Route::middleware('auth')->group(function () {
     })->name('company.create');
 
     // Настройки пользователя
-    Route::get('/settings', function () {
-        return view('settings.index');
-    })->name('settings');
+    Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
 });
 
 // Админ панель
