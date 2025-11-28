@@ -23,6 +23,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/dashboard/task/{task}', [DashboardController::class, 'show'])->name('dashboard.task.show');
     Route::post('/dashboard/task/{task}/status', [DashboardController::class, 'updateStatus'])->name('dashboard.task.status');
+    Route::post('/dashboard/task/{task}/analyze-latest-email', [TaskController::class, 'analyzeLatestEmail'])->name('dashboard.task.analyze');
+    Route::get('/dashboard/task/{task}/analysis-status', [TaskController::class, 'getAnalysisStatus'])->name('dashboard.task.analysis-status');
     Route::get('/dashboard/email/{email}', [DashboardController::class, 'showEmail'])->name('dashboard.email.show');
 
     // Задачи
