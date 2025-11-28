@@ -186,56 +186,393 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function showAnalysisResults(data) {
         analysisResults.classList.remove('hidden');
+
+        // Helper functions
+        function formatPriority(priority) {
+            const colors = {
+                'high': 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
+                'medium': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400',
+                'low': 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+            };
+            const labels = {
+                'high': 'Высокий',
+                'medium': 'Средний',
+                'low': 'Низкий'
+            };
+            return `<span class="px-2 py-1 text-xs rounded-full ${colors[priority] || colors.low}">${labels[priority] || labels.low}</span>`;
+        }
+
+        function formatSentiment(sentiment) {
+            const sentiments = {
+                'positive': '😊 Положительное',
+                'negative': '😞 Отрицательное',
+                'neutral': '😐 Нейтральное'
+            };
+            return sentiments[sentiment] || sentiments.neutral;
+        }
+
+        function formatRiskLevel(level) {
+            const colors = {
+                'high': 'text-red-600',
+                'medium': 'text-yellow-600',
+                'low': 'text-green-600',
+                'none': 'text-gray-600'
+            };
+            const labels = {
+                'high': 'Высокий',
+                'medium': 'Средний',
+                'low': 'Низкий',
+                'none': 'Отсутствуют'
+            };
+            return `<span class="${colors[level] || colors.none}">${labels[level] || labels.none}</span>`;
+        }
+
+        function formatList(items, defaultText = 'Не указаны') {
+            if (!items || !Array.isArray(items) || items.length === 0) return defaultText;
+            return items.map(item => `<span class="inline-block bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 text-xs rounded mr-1 mb-1">${item}</span>`).join('');
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return 'Не указана';
+            try {
+                const date = new Date(dateString);
+                return date.toLocaleString('ru-RU', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch (e) {
+                return dateString;
+            }
+        }
+
+        function translatePrimaryType(type) {
+            const types = {
+                'information_request': 'Запрос информации',
+                'complaint': 'Жалоба',
+                'regulatory_request': 'Регуляторный запрос',
+                'partnership_proposal': 'Партнёрское предложение',
+                'approval_request': 'Запрос на согласование',
+                'notification': 'Уведомление'
+            };
+            return types[type] || type;
+        }
+
+        function translateSecondaryType(type) {
+            const types = {
+                'document_request': 'Запрос документов',
+                'service_complaint': 'Жалоба на услугу',
+                'supervisory_requirement': 'Требование надзорного органа',
+                'business_offer': 'Коммерческое предложение',
+                'contract_approval': 'Согласование договора',
+                'status_update': 'Обновление статуса'
+            };
+            return types[type] || type;
+        }
+
+        function translateBusinessContext(context) {
+            const contexts = {
+                'operational': 'Операционная деятельность',
+                'financial': 'Финансовые вопросы',
+                'legal': 'Юридические аспекты',
+                'technical': 'Технические вопросы',
+                'commercial': 'Коммерческая деятельность',
+                'administrative': 'Административные вопросы'
+            };
+            return contexts[context] || context;
+        }
+
+        function translateFormalityLevel(level) {
+            const levels = {
+                'high': 'Высокий',
+                'medium': 'Средний',
+                'low': 'Низкий'
+            };
+            return levels[level] || level;
+        }
+
         analysisResults.innerHTML = `
-            <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 space-y-3">
+            <div class="space-y-6">
+                <!-- Основная информация -->
                 <div>
-                    <strong class="text-gray-900 dark:text-white">Содержание:</strong>
-                    <p class="text-gray-700 dark:text-gray-300 mt-1">${data.summary || 'Не указано'}</p>
-                </div>
+                    <h4 class="font-semibold text-gray-900 dark:text-white mb-3">📋 Основная информация</h4>
+                    <div class="space-y-2">
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Содержание:</strong>
+                            <p class="text-gray-700 dark:text-gray-300 mt-1">${data.summary || 'Не указано'}</p>
+                        </div>
 
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <strong class="text-gray-900 dark:text-white">Приоритет:</strong>
-                        <span class="ml-2 px-2 py-1 text-xs rounded-full ${
-                            data.priority === 'high' ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400' :
-                            data.priority === 'medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400' :
-                            'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                        }">
-                            ${data.priority === 'high' ? 'Высокий' : data.priority === 'medium' ? 'Средний' : 'Низкий'}
-                        </span>
-                    </div>
-
-                    <div>
-                        <strong class="text-gray-900 dark:text-white">Категория:</strong>
-                        <span class="ml-2 text-gray-700 dark:text-gray-300">${data.category || 'Не указана'}</span>
-                    </div>
-
-                    <div>
-                        <strong class="text-gray-900 dark:text-white">Настроение:</strong>
-                        <span class="ml-2 text-gray-700 dark:text-gray-300">${
-                            data.sentiment === 'positive' ? '😊 Положительное' :
-                            data.sentiment === 'negative' ? '😞 Отрицательное' :
-                            '😐 Нейтральное'
-                        }</span>
-                    </div>
-
-                    <div>
-                        <strong class="text-gray-900 dark:text-white">Требуется действие:</strong>
-                        <span class="ml-2 text-gray-700 dark:text-gray-300">${
-                            data.action_required ? 'Да' : 'Нет'
-                        }</span>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <strong class="text-gray-900 dark:text-white">Приоритет:</strong>
+                                <div class="mt-1">${formatPriority(data.priority)}</div>
+                            </div>
+                            <div>
+                                <strong class="text-gray-900 dark:text-white">Настроение:</strong>
+                                <span class="ml-2 text-gray-700 dark:text-gray-300">${formatSentiment(data.sentiment)}</span>
+                            </div>
+                            <div>
+                                <strong class="text-gray-900 dark:text-white">Требуется действие:</strong>
+                                <span class="ml-2 text-gray-700 dark:text-gray-300">${data.action_required ? 'Да' : 'Нет'}</span>
+                            </div>
+                            <div>
+                                <strong class="text-gray-900 dark:text-white">Срок выполнения:</strong>
+                                <span class="ml-2 text-gray-700 dark:text-gray-300">${data.deadline || 'Не указан'}</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                ${data.suggested_response ? `
-                <div>
-                    <strong class="text-gray-900 dark:text-white">Предлагаемый ответ:</strong>
-                    <p class="text-gray-700 dark:text-gray-300 mt-1">${data.suggested_response}</p>
+                <!-- Классификация -->
+                ${data.classification && (data.classification.primary_type || data.classification.secondary_type || data.classification.business_context) ? `
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <h4 class="font-semibold text-gray-900 dark:text-white mb-3">🏷️ Классификация письма</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        ${data.classification.primary_type ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Основной тип:</strong>
+                            <div class="mt-1">
+                                <span class="inline-block bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2 py-1 text-sm rounded font-medium">
+                                    ${translatePrimaryType(data.classification.primary_type)}
+                                </span>
+                            </div>
+                        </div>
+                        ` : ''}
+                        ${data.classification.secondary_type ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Вторичный тип:</strong>
+                            <div class="mt-1">
+                                <span class="inline-block bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2 py-1 text-sm rounded font-medium">
+                                    ${translateSecondaryType(data.classification.secondary_type)}
+                                </span>
+                            </div>
+                        </div>
+                        ` : ''}
+                        ${data.classification.business_context ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Бизнес-контекст:</strong>
+                            <div class="mt-1">
+                                <span class="inline-block bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2 py-1 text-sm rounded font-medium">
+                                    ${translateBusinessContext(data.classification.business_context)}
+                                </span>
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
                 </div>
                 ` : ''}
 
+                <!-- Параметры обработки -->
+                ${data.processing_requirements && (data.processing_requirements.sla_deadline || data.processing_requirements.response_formality_level || (data.processing_requirements.approval_departments && data.processing_requirements.approval_departments.length > 0)) ? `
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <h4 class="font-semibold text-gray-900 dark:text-white mb-3">⚙️ Параметры обработки</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        ${data.processing_requirements.sla_deadline ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">SLA дедлайн:</strong>
+                            <span class="ml-2 text-gray-700 dark:text-gray-300 font-medium">${formatDate(data.processing_requirements.sla_deadline)}</span>
+                        </div>
+                        ` : ''}
+                        ${data.processing_requirements.response_formality_level ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Уровень формальности:</strong>
+                            <span class="ml-2 text-gray-700 dark:text-gray-300 font-medium">${translateFormalityLevel(data.processing_requirements.response_formality_level)}</span>
+                        </div>
+                        ` : ''}
+                        ${data.processing_requirements.approval_departments && data.processing_requirements.approval_departments.length > 0 ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Необходимые согласования:</strong>
+                            <div class="mt-1">${formatList(data.processing_requirements.approval_departments)}</div>
+                        </div>
+                        ` : ''}
+                        ${typeof data.processing_requirements.escalation_required === 'boolean' ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Эскалация:</strong>
+                            <span class="ml-2 text-gray-700 dark:text-gray-300">${data.processing_requirements.escalation_required ? 'Требуется' : 'Не требуется'}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+
+                    ${data.processing_requirements.legal_risks && data.processing_requirements.legal_risks.risk_level && data.processing_requirements.legal_risks.risk_level !== 'none' ? `
+                    <div class="mt-4 p-3 border border-gray-200 dark:border-gray-700 rounded">
+                        <strong class="text-gray-900 dark:text-white">Юридические риски:</strong>
+                        <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <div>
+                                <span class="text-gray-700 dark:text-gray-300">Уровень риска:</span>
+                                <div class="mt-1">${formatRiskLevel(data.processing_requirements.legal_risks.risk_level)}</div>
+                            </div>
+                            ${data.processing_requirements.legal_risks.risk_factors && data.processing_requirements.legal_risks.risk_factors.length > 0 ? `
+                            <div>
+                                <span class="text-gray-700 dark:text-gray-300">Факторы риска:</span>
+                                <div class="mt-1">${formatList(data.processing_requirements.legal_risks.risk_factors)}</div>
+                            </div>
+                            ` : ''}
+                        </div>
+                        ${data.processing_requirements.legal_risks.recommended_actions && data.processing_requirements.legal_risks.recommended_actions.length > 0 ? `
+                        <div class="mt-2">
+                            <span class="text-gray-700 dark:text-gray-300">Рекомендуемые действия:</span>
+                            <div class="mt-1">${formatList(data.processing_requirements.legal_risks.recommended_actions)}</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                    ` : ''}
+                </div>
+                ` : ''}
+
+                <!-- Контактная информация и ссылки -->
+                ${data.content_analysis && (data.content_analysis.core_request ||
+                    (data.content_analysis.contact_information && data.content_analysis.contact_information.sender_details && (
+                        data.content_analysis.contact_information.sender_details.name ||
+                        data.content_analysis.contact_information.sender_details.position ||
+                        data.content_analysis.contact_information.sender_details.organization ||
+                        data.content_analysis.contact_information.sender_details.phone
+                    )) ||
+                    (data.content_analysis.regulatory_references && (
+                        (data.content_analysis.regulatory_references.laws_and_regulations && data.content_analysis.regulatory_references.laws_and_regulations.length > 0) ||
+                        (data.content_analysis.regulatory_references.contract_references && data.content_analysis.regulatory_references.contract_references.length > 0)
+                    )) ||
+                    (data.content_analysis.requirements_and_expectations && (
+                        (data.content_analysis.requirements_and_expectations.explicit_requirements && data.content_analysis.requirements_and_expectations.explicit_requirements.length > 0) ||
+                        (data.content_analysis.requirements_and_expectations.implicit_expectations && data.content_analysis.requirements_and_expectations.implicit_expectations.length > 0) ||
+                        data.content_analysis.requirements_and_expectations.preferred_outcome
+                    ))
+                ) ? `
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <h4 class="font-semibold text-gray-900 dark:text-white mb-3">📞 Контактная информация</h4>
+                    <div class="space-y-3">
+                        ${data.content_analysis.core_request ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Суть запроса:</strong>
+                            <p class="text-gray-800 dark:text-gray-200 mt-1">${data.content_analysis.core_request}</p>
+                        </div>
+                        ` : ''}
+
+                        ${data.content_analysis.contact_information && data.content_analysis.contact_information.sender_details && (
+                            data.content_analysis.contact_information.sender_details.name ||
+                            data.content_analysis.contact_information.sender_details.position ||
+                            data.content_analysis.contact_information.sender_details.organization ||
+                            data.content_analysis.contact_information.sender_details.phone
+                        ) ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Отправитель:</strong>
+                            <div class="mt-1 text-gray-800 dark:text-gray-200">
+                                ${data.content_analysis.contact_information.sender_details.name ? `<div>👤 ${data.content_analysis.contact_information.sender_details.name}</div>` : ''}
+                                ${data.content_analysis.contact_information.sender_details.position ? `<div>🏢 ${data.content_analysis.contact_information.sender_details.position}</div>` : ''}
+                                ${data.content_analysis.contact_information.sender_details.organization ? `<div>🏛️ ${data.content_analysis.contact_information.sender_details.organization}</div>` : ''}
+                                ${data.content_analysis.contact_information.sender_details.phone ? `<div>📞 ${data.content_analysis.contact_information.sender_details.phone}</div>` : ''}
+                            </div>
+                        </div>
+                        ` : ''}
+
+                        ${data.content_analysis.regulatory_references && (
+                            (data.content_analysis.regulatory_references.laws_and_regulations && data.content_analysis.regulatory_references.laws_and_regulations.length > 0) ||
+                            (data.content_analysis.regulatory_references.contract_references && data.content_analysis.regulatory_references.contract_references.length > 0)
+                        ) ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Нормативные ссылки:</strong>
+                            <div class="mt-1">
+                                ${data.content_analysis.regulatory_references.laws_and_regulations && data.content_analysis.regulatory_references.laws_and_regulations.length > 0 ?
+                                    `<div class="mb-2"><strong class="text-sm text-gray-900 dark:text-white">Законы и нормативные акты:</strong></div>${formatList(data.content_analysis.regulatory_references.laws_and_regulations)}` : ''}
+                                ${data.content_analysis.regulatory_references.contract_references && data.content_analysis.regulatory_references.contract_references.length > 0 ?
+                                    `<div class="mb-2 mt-2"><strong class="text-sm text-gray-900 dark:text-white">Договорные ссылки:</strong></div>${formatList(data.content_analysis.regulatory_references.contract_references)}` : ''}
+                            </div>
+                        </div>
+                        ` : ''}
+
+                        ${data.content_analysis.requirements_and_expectations && (
+                            (data.content_analysis.requirements_and_expectations.explicit_requirements && data.content_analysis.requirements_and_expectations.explicit_requirements.length > 0) ||
+                            (data.content_analysis.requirements_and_expectations.implicit_expectations && data.content_analysis.requirements_and_expectations.implicit_expectations.length > 0) ||
+                            data.content_analysis.requirements_and_expectations.preferred_outcome
+                        ) ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Требования и ожидания:</strong>
+                            <div class="mt-1 space-y-2">
+                                ${data.content_analysis.requirements_and_expectations.explicit_requirements && data.content_analysis.requirements_and_expectations.explicit_requirements.length > 0 ?
+                                    `<div><strong class="text-sm text-gray-900 dark:text-white">Явные требования:</strong></div>${formatList(data.content_analysis.requirements_and_expectations.explicit_requirements)}` : ''}
+                                ${data.content_analysis.requirements_and_expectations.implicit_expectations && data.content_analysis.requirements_and_expectations.implicit_expectations.length > 0 ?
+                                    `<div class="mt-2"><strong class="text-sm text-gray-900 dark:text-white">Неявные ожидания:</strong></div>${formatList(data.content_analysis.requirements_and_expectations.implicit_expectations)}` : ''}
+                                ${data.content_analysis.requirements_and_expectations.preferred_outcome ?
+                                    `<div class="mt-2"><strong class="text-sm text-gray-900 dark:text-white">Желаемый результат:</strong> <span class="text-gray-800 dark:text-gray-200">${data.content_analysis.requirements_and_expectations.preferred_outcome}</span></div>` : ''}
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- Запросы документов -->
+                ${data.metadata_analysis && data.metadata_analysis.document_requests && (
+                    (data.metadata_analysis.document_requests.document_types && data.metadata_analysis.document_requests.document_types.length > 0) ||
+                    (data.metadata_analysis.document_requests.urgency_level && data.metadata_analysis.document_requests.urgency_level !== 'none') ||
+                    (data.metadata_analysis.document_requests.format_requirements && data.metadata_analysis.document_requests.format_requirements.length > 0)
+                ) ? `
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <h4 class="font-semibold text-gray-900 dark:text-white mb-3">📄 Запросы документов</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        ${data.metadata_analysis.document_requests.document_types && data.metadata_analysis.document_requests.document_types.length > 0 ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Типы документов:</strong>
+                            <div class="mt-1">${formatList(data.metadata_analysis.document_requests.document_types)}</div>
+                        </div>
+                        ` : ''}
+                        ${data.metadata_analysis.document_requests.urgency_level && data.metadata_analysis.document_requests.urgency_level !== 'none' ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Срочность:</strong>
+                            <span class="ml-2 text-gray-700 dark:text-gray-300">${data.metadata_analysis.document_requests.urgency_level}</span>
+                        </div>
+                        ` : ''}
+                        ${data.metadata_analysis.document_requests.format_requirements && data.metadata_analysis.document_requests.format_requirements.length > 0 ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Формат:</strong>
+                            <div class="mt-1">${formatList(data.metadata_analysis.document_requests.format_requirements)}</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- Рекомендации по действиям -->
+                ${data.action_recommendations ? `
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <h4 class="font-semibold text-gray-900 dark:text-white mb-3">🎯 Рекомендации по действиям</h4>
+                    <div class="space-y-3">
+                        ${data.action_recommendations.immediate_actions && data.action_recommendations.immediate_actions.length > 0 ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Немедленные действия:</strong>
+                            <div class="mt-1">${formatList(data.action_recommendations.immediate_actions)}</div>
+                        </div>
+                        ` : ''}
+                        ${data.action_recommendations.follow_up_actions && data.action_recommendations.follow_up_actions.length > 0 ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Последующие действия:</strong>
+                            <div class="mt-1">${formatList(data.action_recommendations.follow_up_actions)}</div>
+                        </div>
+                        ` : ''}
+                        ${data.action_recommendations.preventive_measures && data.action_recommendations.preventive_measures.length > 0 ? `
+                        <div>
+                            <strong class="text-gray-900 dark:text-white">Профилактические меры:</strong>
+                            <div class="mt-1">${formatList(data.action_recommendations.preventive_measures)}</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- Предлагаемый ответ -->
+                ${data.suggested_response ? `
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <h4 class="font-semibold text-gray-900 dark:text-white mb-3">💬 Предлагаемый ответ</h4>
+                    <div class="border border-gray-200 dark:border-gray-700 rounded p-3">
+                        <p class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">${data.suggested_response}</p>
+                    </div>
+                </div>
+                ` : ''}
+
+                <!-- Техническая информация -->
                 <div class="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-600 pt-2">
-                    Модель: ${data.model || 'N/A'} | Токены: ${data.tokens || 'N/A'}
+                    Модель: ${data.model || 'N/A'} | Токены: ${data.tokens || 'N/A'} | Время: ${data.processing_time || 'N/A'}s
                 </div>
             </div>
         `;

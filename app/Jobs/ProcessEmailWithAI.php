@@ -91,6 +91,7 @@ class ProcessEmailWithAI implements ShouldQueue
     protected function getResponseFormat(): string
     {
         return json_encode([
+            // Существующие параметры для обратной совместимости
             'summary' => 'string',
             'priority' => 'high|medium|low',
             'category' => 'complaint|request|information|support',
@@ -98,7 +99,79 @@ class ProcessEmailWithAI implements ShouldQueue
             'action_required' => 'boolean',
             'suggested_response' => 'string',
             'key_points' => 'array',
-            'deadline' => 'ISO datetime or null'
+            'deadline' => 'ISO datetime or null',
+
+            // Многоуровневая классификация писем
+            'classification' => [
+                'primary_type' => 'information_request|complaint|regulatory_request|partnership_proposal|approval_request|notification',
+                'secondary_type' => 'document_request|service_complaint|supervisory_requirement|business_offer|contract_approval|status_update',
+                'business_context' => 'operational|financial|legal|technical|commercial|administrative',
+                'communication_channel' => 'formal|official|semi-formal|informal'
+            ],
+
+            // Критичные параметры обработки
+            'processing_requirements' => [
+                'sla_deadline' => 'ISO datetime - calculated based on request type',
+                'response_formality_level' => 'high|medium|low - required tone formality',
+                'approval_departments' => ['array of department names requiring verification'],
+                'legal_risks' => [
+                    'risk_level' => 'high|medium|low|none',
+                    'risk_factors' => ['contractual_liability', 'regulatory_compliance', 'financial_impact', 'data_privacy'],
+                    'recommended_actions' => ['legal_review', 'management_approval', 'documentation_required']
+                ],
+                'escalation_required' => 'boolean',
+                'escalation_level' => 'department_head|executive|legal|none'
+            ],
+
+            // Глубокое извлечение ключевой информации
+            'content_analysis' => [
+                'core_request' => 'string - precise subject of the appeal and sender expectations',
+                'contact_information' => [
+                    'sender_details' => [
+                        'name' => 'string',
+                        'position' => 'string',
+                        'organization' => 'string',
+                        'phone' => 'string',
+                        'additional_contacts' => ['array of alternative contacts']
+                    ],
+                    'mentioned_parties' => ['array of other organizations/persons mentioned']
+                ],
+                'regulatory_references' => [
+                    'laws_and_regulations' => ['array of mentioned legislative norms'],
+                    'contract_references' => ['array of contract numbers or references'],
+                    'deadline_mentions' => ['array of any mentioned time constraints']
+                ],
+                'requirements_and_expectations' => [
+                    'explicit_requirements' => ['array of clearly stated needs'],
+                    'implicit_expectations' => ['array of inferred expectations'],
+                    'preferred_outcome' => 'string - desired result from sender perspective',
+                    'acceptable_alternatives' => ['array of acceptable solutions']
+                ]
+            ],
+
+            // Дополнительные параметры анализа
+            'metadata_analysis' => [
+                'document_requests' => [
+                    'document_types' => ['certificates', 'statements', 'confirmations', 'reports'],
+                    'urgency_level' => 'high|medium|low',
+                    'format_requirements' => ['PDF', 'original', 'certified_copy']
+                ],
+                'stakeholder_analysis' => [
+                    'affected_parties' => ['internal_departments', 'external_partners', 'regulatory_bodies']
+                ],
+                'compliance_indicators' => [
+                    'gdpr_relevant' => 'boolean',
+                    'data_processing_required' => 'boolean',
+                    'confidentiality_level' => 'public|internal|confidential|strictly_confidential'
+                ]
+            ],
+
+            // Рекомендации по действиям
+            'action_recommendations' => [
+                'immediate_actions' => ['array of actions to take within SLA'],
+                'follow_up_actions' => ['array of subsequent steps'],
+                'preventive_measures' => ['array of measures to prevent similar issues']
+            ]
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     }
 
@@ -170,7 +243,9 @@ class ProcessEmailWithAI implements ShouldQueue
         try {
             $parsed = json_decode($jsonText, true, 512, JSON_THROW_ON_ERROR);
             Log::info('Successfully parsed Yandex AI response', ['parsed_keys' => array_keys($parsed)]);
-            return $parsed;
+
+            // Валидируем и дополняем ответ fallback значениями
+            return $this->validateAndFillResponse($parsed);
         } catch (\JsonException $e) {
             Log::error('Failed to parse Yandex AI response JSON', [
                 'raw_text' => $text,
@@ -180,17 +255,104 @@ class ProcessEmailWithAI implements ShouldQueue
             ]);
 
             // Возвращаем fallback ответ
-            return [
-                'summary' => 'Не удалось распарсить ответ ИИ',
-                'priority' => 'medium',
-                'category' => 'error',
-                'sentiment' => 'neutral',
-                'action_required' => true,
-                'suggested_response' => 'Требуется ручная обработка',
-                'key_points' => ['Ошибка парсинга ответа ИИ'],
-                'deadline' => null
-            ];
+            return $this->getFallbackResponse();
         }
+    }
+
+    protected function validateAndFillResponse(array $parsed): array
+    {
+        // Получаем базовую структуру с дефолтными значениями
+        $fallback = $this->getFallbackResponse();
+
+        // Рекурсивно сливаем массивы, сохраняя существующие значения
+        return array_replace_recursive($fallback, $parsed);
+    }
+
+    protected function getFallbackResponse(): array
+    {
+        return [
+            // Существующие параметры
+            'summary' => 'Не удалось проанализировать письмо',
+            'priority' => 'medium',
+            'category' => 'information',
+            'sentiment' => 'neutral',
+            'action_required' => true,
+            'suggested_response' => 'Требуется ручная обработка',
+            'key_points' => ['Анализ не удался'],
+            'deadline' => null,
+
+            // Многоуровневая классификация
+            'classification' => [
+                'primary_type' => 'information_request',
+                'secondary_type' => 'document_request',
+                'business_context' => 'operational',
+                'communication_channel' => 'official'
+            ],
+
+            // Параметры обработки
+            'processing_requirements' => [
+                'sla_deadline' => null,
+                'response_formality_level' => 'medium',
+                'approval_departments' => [],
+                'legal_risks' => [
+                    'risk_level' => 'low',
+                    'risk_factors' => [],
+                    'recommended_actions' => []
+                ],
+                'escalation_required' => false,
+                'escalation_level' => 'none'
+            ],
+
+            // Анализ контента
+            'content_analysis' => [
+                'core_request' => 'Не удалось определить суть запроса',
+                'contact_information' => [
+                    'sender_details' => [
+                        'name' => '',
+                        'position' => '',
+                        'organization' => '',
+                        'phone' => '',
+                        'additional_contacts' => []
+                    ],
+                    'mentioned_parties' => []
+                ],
+                'regulatory_references' => [
+                    'laws_and_regulations' => [],
+                    'contract_references' => [],
+                    'deadline_mentions' => []
+                ],
+                'requirements_and_expectations' => [
+                    'explicit_requirements' => [],
+                    'implicit_expectations' => [],
+                    'preferred_outcome' => '',
+                    'acceptable_alternatives' => []
+                ]
+            ],
+
+            // Метаданные анализа
+            'metadata_analysis' => [
+                'document_requests' => [
+                    'document_types' => [],
+                    'urgency_level' => 'medium',
+                    'format_requirements' => []
+                ],
+                'stakeholder_analysis' => [
+                    'affected_parties' => []
+                ],
+                'compliance_indicators' => [
+                    'gdpr_relevant' => false,
+                    'data_processing_required' => false,
+                    'confidentiality_level' => 'internal'
+                ]
+            ],
+
+            // Рекомендации по действиям
+            'action_recommendations' => [
+                'immediate_actions' => ['Провести ручной анализ'],
+                'follow_up_actions' => [],
+                'preventive_measures' => []
+            ]
+        ];
     }
 
     protected function calculateCost(array $usage, array $modelConfig): array

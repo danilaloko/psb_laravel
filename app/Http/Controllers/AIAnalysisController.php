@@ -79,18 +79,12 @@ class AIAnalysisController extends Controller
 
         // Показываем данные анализа для последней генерации, если они есть (независимо от статуса)
         if ($latestGeneration->response && is_array($latestGeneration->response)) {
-            $response['analysis'] = [
-                'summary' => $latestGeneration->response['summary'] ?? '',
-                'priority' => $latestGeneration->response['priority'] ?? 'medium',
-                'category' => $latestGeneration->response['category'] ?? '',
-                'sentiment' => $latestGeneration->response['sentiment'] ?? 'neutral',
-                'action_required' => $latestGeneration->response['action_required'] ?? false,
-                'suggested_response' => $latestGeneration->response['suggested_response'] ?? '',
+            $response['analysis'] = array_merge($latestGeneration->response, [
                 'processing_time' => $latestGeneration->processing_time,
                 'cost' => $latestGeneration->getCost(),
                 'model' => $latestGeneration->getModelName(),
                 'tokens' => $latestGeneration->getTotalTokens(),
-            ];
+            ]);
         }
 
         return response()->json($response);
