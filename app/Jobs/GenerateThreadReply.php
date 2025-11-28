@@ -36,7 +36,11 @@ class GenerateThreadReply implements ShouldQueue
         $startTime = microtime(true);
 
         // Перезагружаем thread с отношениями для корректной работы после десериализации
-        $this->thread = Thread::find($this->thread->id)->load('emails');
+        $thread = Thread::find($this->thread->id);
+        if (!$thread) {
+            throw new \InvalidArgumentException("Thread {$this->thread->id} not found");
+        }
+        $this->thread = $thread->load('emails');
 
         try {
             // Валидируем thread
