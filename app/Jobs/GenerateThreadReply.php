@@ -40,11 +40,18 @@ class GenerateThreadReply implements ShouldQueue
             // Валидируем thread
             $this->validateThread();
 
+            // Получаем аналитику для всех писем в треде
+            $analyses = $this->getThreadAnalyses();
+            
+            // Формируем контекст аналитики
+            $analysisContext = $this->getAnalysisContext($analyses);
+
             // Получаем модель из конфига
             $modelConfig = config('ai-models.yandex.' . config('ai-models.default_model'));
 
-            // Формируем промпт
-            $prompt = $this->buildPrompt($this->thread->getThreadContext());
+            // Формируем промпт с учетом аналитики
+            $threadContext = $this->thread->getThreadContext();
+            $prompt = $this->buildPrompt($threadContext, $analysisContext);
 
             // Отправляем запрос в Yandex AI Studio
             $response = $aiService->generateCompletion($prompt, $modelConfig);
@@ -55,13 +62,15 @@ class GenerateThreadReply implements ShouldQueue
             // Парсим ответ от Yandex AI
             $parsedResponse = $this->parseYandexResponse($response);
 
-            // Сохраняем результат
-            $generation = $this->saveGeneration($parsedResponse, $processingTime, $modelConfig, $response);
+            // Сохраняем результат с информацией об использованной аналитике
+            $generation = $this->saveGeneration($parsedResponse, $processingTime, $modelConfig, $response, $analyses);
 
             Log::info("Thread {$this->thread->id} reply generated successfully", [
                 'processing_time' => $processingTime,
                 'model' => $modelConfig['name'],
-                'generation_id' => $generation->id
+                'generation_id' => $generation->id,
+                'analyses_used' => $analyses->count(),
+                'emails_with_analysis' => $analyses->pluck('email_id')->unique()->count()
             ]);
 
         } catch (Throwable $e) {
@@ -99,13 +108,152 @@ class GenerateThreadReply implements ShouldQueue
         }
     }
 
-    protected function buildPrompt(string $threadContext): string
+    protected function getThreadAnalyses()
+    {
+        // Получаем все успешные аналитики для писем в треде
+        $emailIds = $this->thread->emails->pluck('id')->toArray();
+        
+        return Generation::whereIn('email_id', $emailIds)
+            ->analyses()
+            ->successful()
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->groupBy('email_id')
+            ->map(function ($group) {
+                // Берем последнюю аналитику для каждого письма
+                return $group->first();
+            });
+    }
+
+    protected function getAnalysisContext($analyses): string
+    {
+        if ($analyses->isEmpty()) {
+            Log::info("No analyses found for thread {$this->thread->id}");
+            return '';
+        }
+
+        $contextParts = [];
+        $emailsWithAnalysis = 0;
+        $emailsWithoutAnalysis = 0;
+
+        // Сортируем письма по дате получения
+        $emails = $this->thread->emails->sortBy('received_at');
+
+        foreach ($emails as $email) {
+            $analysis = $analyses->get($email->id);
+            
+            if (!$analysis || !isset($analysis->response)) {
+                $emailsWithoutAnalysis++;
+                continue;
+            }
+
+            $emailsWithAnalysis++;
+            $response = $analysis->response;
+
+            $analysisText = "=== Аналитика для письма: {$email->subject} ===\n";
+            $analysisText .= "Дата получения: " . ($email->received_at?->format('d.m.Y H:i') ?? 'неизвестно') . "\n\n";
+
+            // Краткое содержание
+            if (!empty($response['summary'])) {
+                $analysisText .= "Краткое содержание: {$response['summary']}\n";
+            }
+
+            // Приоритет
+            if (!empty($response['priority'])) {
+                $priorityMap = ['high' => 'Высокий', 'medium' => 'Средний', 'low' => 'Низкий'];
+                $priority = $priorityMap[$response['priority']] ?? $response['priority'];
+                $analysisText .= "Приоритет: {$priority}\n";
+            }
+
+            // Классификация
+            if (!empty($response['classification'])) {
+                $classification = $response['classification'];
+                $analysisText .= "Тип запроса: " . ($classification['primary_type'] ?? 'не определен') . "\n";
+                if (!empty($classification['secondary_type'])) {
+                    $analysisText .= "Подтип: {$classification['secondary_type']}\n";
+                }
+                if (!empty($classification['business_context'])) {
+                    $analysisText .= "Бизнес-контекст: {$classification['business_context']}\n";
+                }
+            }
+
+            // Суть запроса
+            if (!empty($response['content_analysis']['core_request'])) {
+                $analysisText .= "\nСуть запроса: {$response['content_analysis']['core_request']}\n";
+            }
+
+            // Требования к обработке
+            if (!empty($response['processing_requirements'])) {
+                $requirements = $response['processing_requirements'];
+                if (!empty($requirements['response_formality_level'])) {
+                    $formalityMap = ['high' => 'Высокий', 'medium' => 'Средний', 'low' => 'Низкий'];
+                    $formality = $formalityMap[$requirements['response_formality_level']] ?? $requirements['response_formality_level'];
+                    $analysisText .= "Уровень формальности ответа: {$formality}\n";
+                }
+                if (!empty($requirements['sla_deadline'])) {
+                    $analysisText .= "SLA дедлайн: {$requirements['sla_deadline']}\n";
+                }
+            }
+
+            // Юридические риски
+            if (!empty($response['processing_requirements']['legal_risks'])) {
+                $legalRisks = $response['processing_requirements']['legal_risks'];
+                if (!empty($legalRisks['risk_level']) && $legalRisks['risk_level'] !== 'none') {
+                    $riskMap = ['high' => 'Высокий', 'medium' => 'Средний', 'low' => 'Низкий'];
+                    $risk = $riskMap[$legalRisks['risk_level']] ?? $legalRisks['risk_level'];
+                    $analysisText .= "Уровень юридических рисков: {$risk}\n";
+                    if (!empty($legalRisks['risk_factors']) && is_array($legalRisks['risk_factors'])) {
+                        $analysisText .= "Факторы риска: " . implode(', ', $legalRisks['risk_factors']) . "\n";
+                    }
+                }
+            }
+
+            // Предложенный ответ (если есть)
+            if (!empty($response['suggested_response'])) {
+                $analysisText .= "\nПредложенный ответ (рекомендация): {$response['suggested_response']}\n";
+            }
+
+            // Ключевые моменты
+            if (!empty($response['key_points']) && is_array($response['key_points'])) {
+                $analysisText .= "\nКлючевые моменты:\n";
+                foreach ($response['key_points'] as $point) {
+                    $analysisText .= "- {$point}\n";
+                }
+            }
+
+            // Рекомендации по действиям
+            if (!empty($response['action_recommendations']['immediate_actions']) && is_array($response['action_recommendations']['immediate_actions'])) {
+                $analysisText .= "\nРекомендуемые действия:\n";
+                foreach ($response['action_recommendations']['immediate_actions'] as $action) {
+                    $analysisText .= "- {$action}\n";
+                }
+            }
+
+            $contextParts[] = $analysisText;
+        }
+
+        Log::info("Analysis context built for thread {$this->thread->id}", [
+            'emails_with_analysis' => $emailsWithAnalysis,
+            'emails_without_analysis' => $emailsWithoutAnalysis,
+            'total_emails' => $emails->count(),
+            'context_length' => strlen(implode("\n\n", $contextParts))
+        ]);
+
+        return implode("\n\n", $contextParts);
+    }
+
+    protected function buildPrompt(string $threadContext, string $analysisContext = ''): string
     {
         $template = config('ai-models.prompts.thread_reply.user_template');
 
+        // Если аналитика отсутствует, используем пустую строку
+        $analysisSection = $analysisContext 
+            ? "\n\n=== Аналитика писем ===\n{$analysisContext}\n"
+            : "\n\nПримечание: Аналитика для писем не доступна. Используй только контекст переписки.\n";
+
         return str_replace(
-            ['{thread_context}', '{response_format}'],
-            [$threadContext, $this->getResponseFormat()],
+            ['{thread_context}', '{analysis_context}', '{response_format}'],
+            [$threadContext, $analysisSection, $this->getResponseFormat()],
             $template
         );
     }
@@ -117,16 +265,35 @@ class GenerateThreadReply implements ShouldQueue
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     }
 
-    protected function saveGeneration(array $parsedResponse, float $processingTime, array $modelConfig, array $apiResponse): Generation
+    protected function saveGeneration(array $parsedResponse, float $processingTime, array $modelConfig, array $apiResponse, $analyses = null): Generation
     {
+        // Формируем контекст аналитики для сохранения в промпте
+        $analysisContext = '';
+        if ($analyses && $analyses->isNotEmpty()) {
+            $analysisContext = $this->getAnalysisContext($analyses);
+        }
+        
+        $threadContext = $this->thread->getThreadContext();
+        $prompt = $this->buildPrompt($threadContext, $analysisContext);
+
+        // Формируем метаданные об использованной аналитике
+        $analysisMetadata = [];
+        if ($analyses && $analyses->isNotEmpty()) {
+            $analysisMetadata = [
+                'analyses_used' => $analyses->count(),
+                'email_ids_with_analysis' => $analyses->pluck('email_id')->unique()->values()->toArray(),
+                'analysis_generation_ids' => $analyses->pluck('id')->values()->toArray()
+            ];
+        }
+
         return Generation::create([
             'thread_id' => $this->thread->id,
             'type' => 'reply',
-            'prompt' => $this->buildPrompt($this->thread->getThreadContext()),
+            'prompt' => $prompt,
             'response' => $parsedResponse, // Уже распарсенный JSON
             'processing_time' => $processingTime,
             'status' => 'success',
-            'metadata' => [
+            'metadata' => array_merge([
                 'model' => [
                     'name' => $modelConfig['model'],
                     'version' => $modelConfig['version'],
@@ -150,7 +317,7 @@ class GenerateThreadReply implements ShouldQueue
                     'model_version' => $apiResponse['modelVersion'] ?? null,
                     'finish_reason' => $apiResponse['alternatives'][0]['status'] ?? null
                 ]
-            ]
+            ], $analysisMetadata ? ['analysis_metadata' => $analysisMetadata] : [])
         ]);
     }
 

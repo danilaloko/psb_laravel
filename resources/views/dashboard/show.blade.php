@@ -165,7 +165,7 @@
                                     Копировать
                                 </button>
                             </div>
-                            <div id="reply-text" class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words"></div>
+                            <div id="reply-text" class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words prose prose-sm max-w-none dark:prose-invert"></div>
                             <div id="reply-meta" class="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-600 pt-2 mt-3"></div>
                         </div>
                     </div>
@@ -286,7 +286,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Copy reply button handler
     copyReplyBtn.addEventListener('click', function() {
-        const textToCopy = replyText.textContent;
+        // Копируем оригинальный текст без форматирования
+        const textToCopy = replyText.textContent || replyText.innerText;
         navigator.clipboard.writeText(textToCopy).then(function() {
             // Show temporary success message
             const originalText = copyReplyBtn.textContent;
@@ -865,8 +866,131 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function showReplyResults(data) {
         replyResults.classList.remove('hidden');
-        replyText.textContent = data.text || '';
+        const replyContent = data.text || '';
+        // Простая конвертация markdown в HTML для красивого отображения
+        const formattedContent = formatMarkdown(replyContent);
+        replyText.innerHTML = formattedContent;
         replyMeta.textContent = `Модель: ${data.model || 'N/A'} | Токены: ${data.tokens || 'N/A'}`;
+    }
+
+    function formatMarkdown(text) {
+        if (!text) return '';
+        
+        const lines = text.split('\n');
+        const result = [];
+        let inList = false;
+        let listType = null;
+        let listItems = [];
+        let currentParagraph = [];
+        
+        function flushParagraph() {
+            if (currentParagraph.length > 0) {
+                const paraText = currentParagraph.join(' ').trim();
+                if (paraText) {
+                    result.push('<p class="mb-3">' + formatInline(paraText) + '</p>');
+                }
+                currentParagraph = [];
+            }
+        }
+        
+        function flushList() {
+            if (listItems.length > 0) {
+                const listTag = listType === 'ul' ? 'ul' : 'ol';
+                const listClass = listType === 'ul' 
+                    ? 'list-disc list-inside my-2 space-y-1' 
+                    : 'list-decimal list-inside my-2 space-y-1';
+                result.push(`<${listTag} class="${listClass}">`);
+                listItems.forEach(item => {
+                    result.push(`<li class="ml-4">${formatInline(item)}</li>`);
+                });
+                result.push(`</${listTag}>`);
+                listItems = [];
+            }
+            inList = false;
+            listType = null;
+        }
+        
+        function formatInline(text) {
+            // Экранируем HTML для безопасности
+            let html = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            
+            // Жирный текст **text**
+            html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            
+            // Курсив *text* (но не если это часть **text**)
+            html = html.replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, '<em>$1</em>');
+            
+            return html;
+        }
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            
+            // Пустая строка
+            if (!line) {
+                flushList();
+                flushParagraph();
+                continue;
+            }
+            
+            // Заголовки
+            if (line.startsWith('### ')) {
+                flushList();
+                flushParagraph();
+                result.push(`<h3 class="text-lg font-semibold mt-4 mb-2">${formatInline(line.substring(4))}</h3>`);
+                continue;
+            }
+            if (line.startsWith('## ')) {
+                flushList();
+                flushParagraph();
+                result.push(`<h2 class="text-xl font-semibold mt-5 mb-3">${formatInline(line.substring(3))}</h2>`);
+                continue;
+            }
+            if (line.startsWith('# ')) {
+                flushList();
+                flushParagraph();
+                result.push(`<h1 class="text-2xl font-bold mt-6 mb-4">${formatInline(line.substring(2))}</h1>`);
+                continue;
+            }
+            
+            // Маркированный список
+            const bulletMatch = line.match(/^[-•]\s+(.+)$/);
+            if (bulletMatch) {
+                flushParagraph();
+                if (!inList || listType !== 'ul') {
+                    flushList();
+                    inList = true;
+                    listType = 'ul';
+                }
+                listItems.push(bulletMatch[1]);
+                continue;
+            }
+            
+            // Нумерованный список
+            const orderedMatch = line.match(/^\d+\.\s+(.+)$/);
+            if (orderedMatch) {
+                flushParagraph();
+                if (!inList || listType !== 'ol') {
+                    flushList();
+                    inList = true;
+                    listType = 'ol';
+                }
+                listItems.push(orderedMatch[1]);
+                continue;
+            }
+            
+            // Обычный текст
+            flushList();
+            currentParagraph.push(line);
+        }
+        
+        flushList();
+        flushParagraph();
+        
+        return result.join('\n');
     }
 
     function startReplyPolling() {
