@@ -794,7 +794,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <!-- Предлагаемый ответ -->
                 ${data.suggested_response ? `
                 <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
-                    <h4 class="font-semibold text-gray-900 dark:text-white mb-3">💬 Предлагаемый ответ</h4>
+                    <h4 class="font-semibold text-gray-900 dark:text-white mb-3">💬 Кратко что нужно сделать</h4>
                     <div class="border border-gray-200 dark:border-gray-700 rounded p-3">
                         <p class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">${data.suggested_response}</p>
                     </div>
