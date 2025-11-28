@@ -26,10 +26,22 @@ Route::middleware('auth')->group(function () {
     Route::post('/dashboard/task/{task}/analyze-latest-email', [TaskController::class, 'analyzeLatestEmail'])->name('dashboard.task.analyze');
     Route::get('/dashboard/task/{task}/analysis-status', [TaskController::class, 'getAnalysisStatus'])->name('dashboard.task.analysis-status');
     Route::get('/dashboard/email/{email}', [DashboardController::class, 'showEmail'])->name('dashboard.email.show');
+    Route::post('/dashboard/email/{email}/analyze', [AIAnalysisController::class, 'processEmail'])->name('dashboard.email.analyze');
+    Route::get('/dashboard/email/{email}/analysis-status', [AIAnalysisController::class, 'getAnalysisStatus'])->name('dashboard.email.analysis-status');
 
     // Задачи
     Route::get('/tasks/create', [TaskController::class, 'create'])->name('tasks.create');
     Route::post('/tasks', [TaskController::class, 'store'])->name('tasks.store');
+
+    // Создание компании
+    Route::get('/company/create', function () {
+        return view('company.create');
+    })->name('company.create');
+
+    // Настройки пользователя
+    Route::get('/settings', function () {
+        return view('settings.index');
+    })->name('settings');
 });
 
 // Админ панель

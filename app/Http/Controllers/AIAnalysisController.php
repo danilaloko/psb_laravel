@@ -5,19 +5,95 @@ namespace App\Http\Controllers;
 use App\Jobs\ProcessEmailWithAI;
 use App\Models\Email;
 use App\Models\Generation;
+use App\Models\Task;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class AIAnalysisController extends Controller
 {
     // Метод для ручной обработки существующего email
     public function processEmail(Email $email)
     {
+        // Проверяем права доступа (админы имеют доступ ко всем письмам)
+        $user = Auth::user();
+        if (!$user->isAdmin()) {
+            // Обычные пользователи могут анализировать только письма из своих задач
+            $task = Task::whereHas('thread', function($query) use ($email) {
+                $query->where('id', $email->thread_id);
+            })->where('executor_id', $user->id)->first();
+
+            if (!$task) {
+                abort(403, 'У вас нет доступа к этому письму');
+            }
+        }
+
+        // Всегда запускаем новый анализ, независимо от существующих
         ProcessEmailWithAI::dispatch($email);
 
         return response()->json([
-            'message' => 'Email отправлен на обработку ИИ',
+            'success' => true,
+            'message' => 'Анализ запущен',
             'email_id' => $email->id
         ]);
+    }
+
+    // Получить статус анализа для email (для polling)
+    public function getAnalysisStatus(Email $email)
+    {
+        // Проверяем права доступа (админы имеют доступ ко всем письмам)
+        $user = Auth::user();
+        if (!$user->isAdmin()) {
+            // Обычные пользователи могут видеть только письма из своих задач
+            $task = Task::whereHas('thread', function($query) use ($email) {
+                $query->where('id', $email->thread_id);
+            })->where('executor_id', $user->id)->first();
+
+            if (!$task) {
+                abort(403, 'У вас нет доступа к этому письму');
+            }
+        }
+
+        // Находим последнюю генерацию для этого email (по времени создания)
+        $latestGeneration = Generation::where('email_id', $email->id)
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if (!$latestGeneration) {
+            return response()->json([
+                'status' => 'not_started',
+                'message' => 'Анализ не запускался'
+            ]);
+        }
+
+        // Преобразуем статус из БД в статус для фронтенда
+        // Если генерация создана недавно (менее 5 минут назад) и статус не success, значит анализ выполняется
+        $isRecent = $latestGeneration->created_at->isAfter(now()->subMinutes(5));
+        $frontendStatus = $latestGeneration->status === 'success' 
+            ? 'completed' 
+            : ($isRecent && $latestGeneration->status !== 'error' ? 'processing' : $latestGeneration->status);
+        
+        $response = [
+            'status' => $frontendStatus,
+            'created_at' => $latestGeneration->created_at->toISOString(),
+        ];
+
+        // Показываем данные анализа для последней генерации, если они есть (независимо от статуса)
+        if ($latestGeneration->response && is_array($latestGeneration->response)) {
+            $response['analysis'] = [
+                'summary' => $latestGeneration->response['summary'] ?? '',
+                'priority' => $latestGeneration->response['priority'] ?? 'medium',
+                'category' => $latestGeneration->response['category'] ?? '',
+                'sentiment' => $latestGeneration->response['sentiment'] ?? 'neutral',
+                'action_required' => $latestGeneration->response['action_required'] ?? false,
+                'suggested_response' => $latestGeneration->response['suggested_response'] ?? '',
+                'processing_time' => $latestGeneration->processing_time,
+                'cost' => $latestGeneration->getCost(),
+                'model' => $latestGeneration->getModelName(),
+                'tokens' => $latestGeneration->getTotalTokens(),
+            ];
+        }
+
+        return response()->json($response);
     }
 
     // Показать результаты AI анализа для email
