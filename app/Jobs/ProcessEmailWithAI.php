@@ -44,7 +44,7 @@ class ProcessEmailWithAI implements ShouldQueue
             $searchContext = $this->formatSearchResults($searchResults);
 
             // Получаем модель из конфига
-            $modelConfig = config('ai-models.yandex.' . config('ai-models.default_model'));
+            $modelConfig = config('ai-models')['yandex'][config('ai-models.default_model')];
 
             // Формируем промпт с учетом результатов поиска
             $prompt = $this->buildPrompt($this->email->content, $searchContext);

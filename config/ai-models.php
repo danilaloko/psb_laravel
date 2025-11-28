@@ -12,8 +12,8 @@ return [
         ],
         'gpt-5.1-pro' => [
             'name' => 'YandexGPT 5.1 Pro',
-            'model' => 'yandexgpt',
-            'version' => '5.1',
+            'model' => 'yandexgpt-5.1',
+            'version' => 'latest',
             'temperature' => 0.7,
             'max_tokens' => 2000,
             'endpoint' => 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion',

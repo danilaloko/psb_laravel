@@ -62,7 +62,7 @@ class GenerateThreadReply implements ShouldQueue
             $analysisContext = $this->getAnalysisContext($analyses);
 
             // Получаем модель из конфига
-            $modelConfig = config('ai-models.yandex.' . config('ai-models.default_model'));
+            $modelConfig = config('ai-models')['yandex'][config('ai-models.default_model')];
 
             // Формируем промпт с учетом аналитики и результатов поиска
             // Проверяем, что метод доступен
