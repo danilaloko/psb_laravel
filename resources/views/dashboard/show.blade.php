@@ -149,7 +149,7 @@
             <div class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Сгенерировать ответ</h3>
-                    <button id="generate-reply-btn" type="button" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button id="generate-reply-btn" type="button" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                         <span id="generate-reply-btn-text">Сгенерировать ответ</span>
                     </button>
                 </div>
