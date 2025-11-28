@@ -2,6 +2,8 @@
 
 namespace App\Jobs;
 
+use App\Events\ThreadReplyGenerationFailed;
+use App\Events\ThreadReplyGenerationStarted;
 use App\Models\Generation;
 use App\Models\Thread;
 use App\Services\YandexAIService;
@@ -42,6 +44,9 @@ class GenerateThreadReply implements ShouldQueue
         }
         $this->thread = $thread->load('emails');
 
+        // Отправляем событие о начале генерации
+        event(new ThreadReplyGenerationStarted($this->thread));
+
         try {
             // Валидируем thread
             $this->validateThread();
@@ -60,6 +65,10 @@ class GenerateThreadReply implements ShouldQueue
             $modelConfig = config('ai-models.yandex.' . config('ai-models.default_model'));
 
             // Формируем промпт с учетом аналитики и результатов поиска
+            // Проверяем, что метод доступен
+            if (!method_exists($this->thread, 'getThreadContext')) {
+                throw new \RuntimeException("Method getThreadContext() not found on Thread model. Thread ID: {$this->thread->id}");
+            }
             $threadContext = $this->thread->getThreadContext();
             $prompt = $this->buildPrompt($threadContext, $analysisContext, $searchContext);
 
@@ -91,6 +100,11 @@ class GenerateThreadReply implements ShouldQueue
                 'attempt' => $this->attempts()
             ]);
 
+            // Отправляем событие об ошибке только при последней попытке
+            if ($this->attempts() >= $this->tries) {
+                event(new ThreadReplyGenerationFailed($this->thread, $e->getMessage()));
+            }
+
             throw $e; // Повторная попытка или failure
         }
     }
@@ -102,6 +116,9 @@ class GenerateThreadReply implements ShouldQueue
             'error' => $exception->getMessage(),
             'attempts' => $this->attempts()
         ]);
+
+        // Отправляем событие об окончательной ошибке
+        event(new ThreadReplyGenerationFailed($this->thread, $exception->getMessage()));
     }
 
     protected function validateThread(): void
@@ -409,6 +426,10 @@ class GenerateThreadReply implements ShouldQueue
         // Формируем контекст поиска
         $searchContext = $this->formatSearchResults($searchResults);
 
+        // Проверяем, что метод доступен
+        if (!method_exists($this->thread, 'getThreadContext')) {
+            throw new \RuntimeException("Method getThreadContext() not found on Thread model. Thread ID: {$this->thread->id}");
+        }
         $threadContext = $this->thread->getThreadContext();
         $prompt = $this->buildPrompt($threadContext, $analysisContext, $searchContext);
 
