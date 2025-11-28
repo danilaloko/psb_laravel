@@ -26,3 +26,10 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
 });
+
+Route::post('/telegram/auth', [TelegramAuthController::class, 'auth']);
+
+// Отправка уведомлений пользователю
+Route::post('/telegram/notify', [TelegramNotifyController::class, 'send']);
+
+Route::post('/telegram/webhook', [TelegramWebhookController::class, 'handle']);
