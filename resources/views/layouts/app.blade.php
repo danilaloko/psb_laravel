@@ -18,7 +18,7 @@
                 <div class="px-6 py-4">
                     <div class="flex items-center justify-between">
                         <!-- Logo -->
-                        <h1 class="text-xl font-bold text-gray-900 dark:text-white">Workspace</h1>
+                        <h1 class="text-xl font-bold text-gray-900 dark:text-white">ПСБ.почта</h1>
 
                         <!-- Navigation -->
                         <nav class="flex items-center space-x-6">
