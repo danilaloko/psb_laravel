@@ -180,8 +180,12 @@ class GenerateThreadReply implements ShouldQueue
             $query = $analysis->response['summary'] . ' ' . $query;
         }
 
-        // Ограничиваем длину запроса
-        return substr($query, 0, 200);
+        // Очищаем от некорректных UTF-8 символов и нормализуем кодировку
+        $query = mb_convert_encoding($query, 'UTF-8', 'UTF-8');
+        // Удаляем некорректные UTF-8 символы
+        $query = mb_convert_encoding($query, 'UTF-8', 'UTF-8');
+        // Ограничиваем длину запроса с учетом UTF-8
+        return mb_substr($query, 0, 200);
     }
 
     /**
@@ -416,20 +420,21 @@ class GenerateThreadReply implements ShouldQueue
 
         // Формируем метаданные о поиске
         $searchMetadata = [];
-        if ($this->indexId && $searchResults !== null && isset($searchResults['data'])) {
+        if ($this->indexId) {
+            // Сохраняем метаданные о поиске даже если он не удался
             $searchMetadata = [
                 'vector_search' => [
                     'index_id' => $this->indexId,
                     'query' => $this->buildSearchQuery(),
-                    'results_count' => count($searchResults['data']),
-                    'results' => array_map(function ($result) {
+                    'results_count' => $searchResults && isset($searchResults['data']) ? count($searchResults['data']) : 0,
+                    'results' => $searchResults && isset($searchResults['data']) ? array_map(function ($result) {
                         return [
                             'filename' => $result['filename'] ?? null,
                             'score' => $result['score'] ?? 0,
                             'file_id' => $result['file_id'] ?? null,
                             'content_length' => isset($result['content'][0]['text']) ? strlen($result['content'][0]['text']) : 0
                         ];
-                    }, $searchResults['data'])
+                    }, $searchResults['data']) : []
                 ]
             ];
         }

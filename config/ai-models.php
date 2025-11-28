@@ -10,6 +10,14 @@ return [
             'max_tokens' => 2000,
             'endpoint' => 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion',
         ],
+        'gpt-5.1-pro' => [
+            'name' => 'YandexGPT 5.1 Pro',
+            'model' => 'yandexgpt',
+            'version' => '5.1',
+            'temperature' => 0.7,
+            'max_tokens' => 2000,
+            'endpoint' => 'https://llm.api.cloud.yandex.net/foundationModels/v1/completion',
+        ],
         'gpt-lite' => [
             'name' => 'YandexGPT Lite',
             'model' => 'yandexgpt-lite',
@@ -28,7 +36,7 @@ return [
         ]
     ],
 
-    'default_model' => 'gpt-pro',
+    'default_model' => 'gpt-5.1-pro',
 
     'prompts' => [
         'email_analysis' => [

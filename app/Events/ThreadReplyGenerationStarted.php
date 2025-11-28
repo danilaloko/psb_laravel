@@ -2,7 +2,7 @@
 
 namespace App\Events;
 
-use App\Models\Generation;
+use App\Models\Thread;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PresenceChannel;
@@ -11,18 +11,18 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class AnalysisStatusUpdated implements ShouldBroadcast
+class ThreadReplyGenerationStarted implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    public ?Generation $generation = null;
+    public ?Thread $thread = null;
 
     /**
      * Create a new event instance.
      */
-    public function __construct(?Generation $generation = null)
+    public function __construct(?Thread $thread = null)
     {
-        $this->generation = $generation;
+        $this->thread = $thread;
     }
 
     /**
@@ -33,7 +33,7 @@ class AnalysisStatusUpdated implements ShouldBroadcast
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('analysis-status'),
+            new PrivateChannel('thread-reply-generation'),
         ];
     }
 }
