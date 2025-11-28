@@ -71,7 +71,7 @@ class TaskController extends Controller
         return redirect()->route('dashboard.task.show', $task)->with('success', 'Задача создана успешно');
     }
 
-    public function analyzeLatestEmail(Task $task)
+    public function analyzeLatestEmail(Request $request, Task $task)
     {
         // Проверяем права доступа (админы имеют доступ ко всем задачам)
         $user = Auth::user();
@@ -89,13 +89,18 @@ class TaskController extends Controller
             ], 400);
         }
 
+        // Получаем индекс из запроса (опционально)
+        $indexId = $request->input('search_index');
+        $indexId = $indexId && $indexId !== '' ? $indexId : null;
+
         // Всегда запускаем новый анализ, независимо от существующих
-        ProcessEmailWithAI::dispatch($latestEmail);
+        ProcessEmailWithAI::dispatch($latestEmail, $indexId);
 
         return response()->json([
             'success' => true,
-            'message' => 'Анализ запущен',
-            'email_id' => $latestEmail->id
+            'message' => 'Анализ запущен' . ($indexId ? ' с использованием поискового индекса' : ''),
+            'email_id' => $latestEmail->id,
+            'index_used' => $indexId
         ]);
     }
 
@@ -189,27 +194,65 @@ class TaskController extends Controller
             ], 400);
         }
 
+        // Получаем индекс из запроса (опционально)
+        $indexId = $request->input('search_index');
+        $indexId = $indexId && $indexId !== '' ? $indexId : null;
+
         try {
             // Загружаем thread с отношениями перед dispatch для корректной сериализации
             $thread = $task->thread()->with('emails')->firstOrFail();
-            
-            // Запускаем генерацию ответа
-            \App\Jobs\GenerateThreadReply::dispatch($thread);
+
+            // Запускаем генерацию ответа с выбранным индексом (если указан)
+            \App\Jobs\GenerateThreadReply::dispatch($thread, $indexId);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Генерация ответа запущена'
+                'message' => 'Генерация ответа запущена' . ($indexId ? ' с использованием поискового индекса' : ''),
+                'index_used' => $indexId
             ]);
 
         } catch (\Exception $e) {
             Log::error("Failed to start reply generation for task {$task->id}", [
                 'error' => $e->getMessage(),
-                'user_id' => $user->id
+                'user_id' => $user->id,
+                'index_id' => $indexId
             ]);
 
             return response()->json([
                 'success' => false,
                 'message' => 'Ошибка при запуске генерации ответа'
+            ], 500);
+        }
+    }
+
+    public function getSearchIndexes()
+    {
+        try {
+            $service = app(\App\Services\YandexAIService::class);
+            $indexes = $service->getSearchIndexes();
+
+            // Форматируем для фронтенда
+            $formattedIndexes = array_map(function ($index) {
+                return [
+                    'id' => $index['id'],
+                    'name' => $index['name'] ?? 'Без названия',
+                    'description' => $index['description'] ?? null
+                ];
+            }, $indexes);
+
+            return response()->json([
+                'success' => true,
+                'indexes' => $formattedIndexes
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch search indexes', [
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Не удалось загрузить поисковые индексы',
+                'indexes' => []
             ], 500);
         }
     }

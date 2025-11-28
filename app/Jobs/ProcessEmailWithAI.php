@@ -22,10 +22,12 @@ class ProcessEmailWithAI implements ShouldQueue
     public $timeout = 120; // Таймаут выполнения job - 2 минуты
 
     protected Email $email;
+    protected ?string $indexId;
 
-    public function __construct(Email $email)
+    public function __construct(Email $email, ?string $indexId = null)
     {
         $this->email = $email;
+        $this->indexId = $indexId;
         $this->onQueue('ai-processing'); // Специальная очередь для ИИ задач
     }
 
@@ -33,12 +35,19 @@ class ProcessEmailWithAI implements ShouldQueue
     {
         $startTime = microtime(true);
 
+        // Перезагружаем email для корректной работы после десериализации
+        $this->email = Email::find($this->email->id);
+
         try {
+            // Выполняем поиск по Vector Store (если указан индекс)
+            $searchResults = $this->performVectorSearch();
+            $searchContext = $this->formatSearchResults($searchResults);
+
             // Получаем модель из конфига
             $modelConfig = config('ai-models.yandex.' . config('ai-models.default_model'));
 
-            // Формируем промпт
-            $prompt = $this->buildPrompt($this->email->content);
+            // Формируем промпт с учетом результатов поиска
+            $prompt = $this->buildPrompt($this->email->content, $searchContext);
 
             // Отправляем запрос в Yandex AI Studio
             $response = $aiService->generateCompletion($prompt, $modelConfig);
@@ -49,13 +58,15 @@ class ProcessEmailWithAI implements ShouldQueue
             // Парсим ответ от Yandex AI
             $parsedResponse = $this->parseYandexResponse($response);
 
-            // Сохраняем результат
-            $generation = $this->saveGeneration($parsedResponse, $processingTime, $modelConfig, $response);
+            // Сохраняем результат с информацией о поиске
+            $generation = $this->saveGeneration($parsedResponse, $processingTime, $modelConfig, $response, $searchResults);
 
             Log::info("Email {$this->email->id} processed successfully", [
                 'processing_time' => $processingTime,
                 'model' => $modelConfig['name'],
-                'generation_id' => $generation->id
+                'generation_id' => $generation->id,
+                'search_index_used' => $this->indexId,
+                'search_results_count' => $searchResults ? count($searchResults['data'] ?? []) : 0
             ]);
 
         } catch (Throwable $e) {
@@ -77,13 +88,115 @@ class ProcessEmailWithAI implements ShouldQueue
         ]);
     }
 
-    protected function buildPrompt(string $emailContent): string
+    /**
+     * Выполнить поиск по Vector Store индексу
+     */
+    protected function performVectorSearch(): ?array
+    {
+        Log::info("performVectorSearch called for email {$this->email->id}, indexId: " . ($this->indexId ?? 'null'));
+
+        if (!$this->indexId) {
+            Log::info("No search index specified for email {$this->email->id}");
+            return null;
+        }
+
+        try {
+            // Формируем поисковый запрос на основе содержания email
+            $searchQuery = $this->buildSearchQuery();
+
+            Log::info("Performing vector search for email {$this->email->id}", [
+                'index_id' => $this->indexId,
+                'query' => $searchQuery
+            ]);
+
+            $searchResults = app(YandexAIService::class)->searchVectorStore($this->indexId, $searchQuery, 5);
+
+            Log::info("Vector search completed for email {$this->email->id}", [
+                'results_count' => count($searchResults['data'] ?? [])
+            ]);
+
+            return $searchResults;
+
+        } catch (\Exception $e) {
+            Log::error("Vector search failed for email {$this->email->id}", [
+                'index_id' => $this->indexId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            // Возвращаем null при ошибке поиска, чтобы продолжить анализ без поиска
+            return null;
+        }
+    }
+
+    /**
+     * Сформировать поисковый запрос на основе содержания email
+     */
+    protected function buildSearchQuery(): string
+    {
+        // Используем тему и краткое содержание email для формирования запроса
+        $query = $this->email->subject;
+
+        // Ограничиваем длину запроса
+        return substr($query, 0, 200);
+    }
+
+    /**
+     * Форматировать результаты поиска для включения в промпт
+     */
+    protected function formatSearchResults(?array $searchResults): string
+    {
+        if (!$searchResults || !isset($searchResults['data']) || empty($searchResults['data'])) {
+            return '';
+        }
+
+        $formattedResults = [];
+
+        foreach ($searchResults['data'] as $result) {
+            $content = $result['content'] ?? [];
+
+            if (empty($content) || !isset($content[0]['text'])) {
+                continue;
+            }
+
+            $filename = $result['filename'] ?? 'неизвестный файл';
+            $score = $result['score'] ?? 0;
+            $text = $content[0]['text'];
+
+            // Обрабатываем UTF-8 символы
+            $text = mb_convert_encoding($text, 'UTF-8', 'UTF-8');
+            $filename = mb_convert_encoding($filename, 'UTF-8', 'UTF-8');
+
+            // Ограничиваем длину текста для каждого результата
+            $truncatedText = mb_strlen($text) > 1000 ? mb_substr($text, 0, 1000) . '...' : $text;
+
+            $formattedResults[] = "=== Результат поиска ===\n" .
+                                "Файл: {$filename}\n" .
+                                "Релевантность: " . round($score * 100, 2) . "%\n\n" .
+                                "Содержание:\n{$truncatedText}";
+        }
+
+        if (empty($formattedResults)) {
+            return '';
+        }
+
+        return "=== Результаты поиска по базе знаний ===\n\n" .
+               implode("\n\n---\n\n", $formattedResults) . "\n\n" .
+               "Используй эту информацию для более точного анализа письма.\n\n";
+    }
+
+    protected function buildPrompt(string $emailContent, string $searchContext = ''): string
     {
         $template = config('ai-models.prompts.email_analysis.user_template');
 
+        // Добавляем результаты поиска если они есть
+        $searchSection = $searchContext
+            ? "\n\n{$searchContext}"
+            : "";
+
         return str_replace(
             ['{email_content}', '{response_format}'],
-            [$emailContent, $this->getResponseFormat()],
+            [$emailContent, $searchSection . $this->getResponseFormat()],
             $template
         );
     }
@@ -175,15 +288,40 @@ class ProcessEmailWithAI implements ShouldQueue
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     }
 
-    protected function saveGeneration(array $parsedResponse, float $processingTime, array $modelConfig, array $apiResponse): Generation
+    protected function saveGeneration(array $parsedResponse, float $processingTime, array $modelConfig, array $apiResponse, ?array $searchResults = null): Generation
     {
+        // Формируем контекст поиска
+        $searchContext = $this->formatSearchResults($searchResults);
+        $prompt = $this->buildPrompt($this->email->content, $searchContext);
+
+        // Формируем метаданные о поиске
+        $searchMetadata = [];
+        if ($this->indexId && $searchResults !== null && isset($searchResults['data'])) {
+            $searchMetadata = [
+                'vector_search' => [
+                    'index_id' => $this->indexId,
+                    'query' => $this->buildSearchQuery(),
+                    'results_count' => count($searchResults['data']),
+                    'results' => array_map(function ($result) {
+                        return [
+                            'filename' => $result['filename'] ?? null,
+                            'score' => $result['score'] ?? 0,
+                            'file_id' => $result['file_id'] ?? null,
+                            'content_length' => isset($result['content'][0]['text']) ? strlen($result['content'][0]['text']) : 0
+                        ];
+                    }, $searchResults['data'])
+                ]
+            ];
+        }
+
         return Generation::create([
             'email_id' => $this->email->id,
-            'prompt' => $this->buildPrompt($this->email->content),
+            'type' => 'analysis',
+            'prompt' => $prompt,
             'response' => $parsedResponse, // Уже распарсенный JSON
             'processing_time' => $processingTime,
             'status' => 'success',
-            'metadata' => [
+            'metadata' => array_merge([
                 'model' => [
                     'name' => $modelConfig['model'],
                     'version' => $modelConfig['version'],
@@ -207,7 +345,7 @@ class ProcessEmailWithAI implements ShouldQueue
                     'model_version' => $apiResponse['modelVersion'] ?? null,
                     'finish_reason' => $apiResponse['alternatives'][0]['status'] ?? null
                 ]
-            ]
+            ], $searchMetadata ? ['search_metadata' => $searchMetadata] : [])
         ]);
     }
 

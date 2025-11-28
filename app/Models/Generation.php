@@ -18,6 +18,11 @@ class Generation extends Model
         'processing_time' => 'decimal:3'
     ];
 
+    /**
+     * Отключаем автоматический broadcast событий модели
+     */
+    protected $dispatchesEvents = [];
+
     public function email(): BelongsTo
     {
         return $this->belongsTo(Email::class);

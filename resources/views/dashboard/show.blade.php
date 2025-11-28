@@ -129,11 +129,25 @@
 
             <!-- AI Analysis Section -->
             <div class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Анализ последнего письма</h3>
-                    <button id="analyze-btn" type="button" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                        <span id="analyze-btn-text">Запустить анализ</span>
-                    </button>
+                <div class="flex items-start justify-between mb-4">
+                    <div class="flex-1">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">Анализ последнего письма</h3>
+                        <div class="space-y-2">
+                            <label for="analyze-search-index-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Использовать поисковый индекс (опционально)
+                            </label>
+                            <select id="analyze-search-index-select" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">Не использовать поиск</option>
+                                <!-- Индексы будут загружены динамически -->
+                            </select>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Выберите индекс для обогащения анализа релевантной информацией из базы знаний</p>
+                        </div>
+                    </div>
+                    <div class="ml-4">
+                        <button id="analyze-btn" type="button" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            <span id="analyze-btn-text">Запустить анализ</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Analysis Content -->
@@ -147,11 +161,25 @@
 
             <!-- Generate Reply Section -->
             <div class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Сгенерировать ответ</h3>
-                    <button id="generate-reply-btn" type="button" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                        <span id="generate-reply-btn-text">Сгенерировать ответ</span>
-                    </button>
+                <div class="flex items-start justify-between mb-4">
+                    <div class="flex-1">
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">Сгенерировать ответ</h3>
+                        <div class="space-y-2">
+                            <label for="search-index-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Использовать поисковый индекс (опционально)
+                            </label>
+                            <select id="search-index-select" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">Не использовать поиск</option>
+                                <!-- Индексы будут загружены динамически -->
+                            </select>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Выберите индекс для обогащения ответа релевантной информацией из базы знаний</p>
+                        </div>
+                    </div>
+                    <div class="ml-4">
+                        <button id="generate-reply-btn" type="button" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            <span id="generate-reply-btn-text">Сгенерировать ответ</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Reply Content -->
@@ -212,6 +240,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const replyMeta = document.getElementById('reply-meta');
     const copyReplyBtn = document.getElementById('copy-reply-btn');
 
+    // Search index elements
+    const searchIndexSelect = document.getElementById('search-index-select');
+    const analyzeSearchIndexSelect = document.getElementById('analyze-search-index-select');
+
     // CSRF token for AJAX requests
     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
@@ -223,13 +255,19 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             setAnalyzingState(true);
 
+            // Получаем выбранный индекс для анализа
+            const selectedIndex = analyzeSearchIndexSelect.value;
+
             const response = await fetch(`{{ route("dashboard.task.analyze", $task) }}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': csrfToken,
                     'Accept': 'application/json'
-                }
+                },
+                body: JSON.stringify({
+                    search_index: selectedIndex
+                })
             });
 
             const data = await response.json();
@@ -256,13 +294,19 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             setGeneratingReplyState(true);
 
+            // Получаем выбранный индекс
+            const selectedIndex = searchIndexSelect.value;
+
             const response = await fetch(`{{ route("dashboard.task.generate-reply", $task) }}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': csrfToken,
                     'Accept': 'application/json'
-                }
+                },
+                body: JSON.stringify({
+                    search_index: selectedIndex
+                })
             });
 
             const data = await response.json();
@@ -306,11 +350,54 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // Load search indexes
+    loadSearchIndexes();
+
     // Load initial analysis status
     loadAnalysisStatus();
 
     // Load initial reply status
     loadReplyStatus();
+
+    async function loadSearchIndexes() {
+        try {
+            const response = await fetch(`{{ route("dashboard.search-indexes") }}`);
+            const data = await response.json();
+
+            if (data.success && data.indexes) {
+                // Очищаем списки и добавляем опцию "Не использовать поиск"
+                const defaultOption = '<option value="">Не использовать поиск</option>';
+                searchIndexSelect.innerHTML = defaultOption;
+                analyzeSearchIndexSelect.innerHTML = defaultOption;
+
+                // Добавляем доступные индексы в оба селекта
+                data.indexes.forEach(index => {
+                    const option = document.createElement('option');
+                    option.value = index.id;
+                    option.textContent = `${index.name} (${index.id})`;
+                    if (index.description) {
+                        option.title = index.description;
+                    }
+
+                    // Добавляем в оба селекта
+                    searchIndexSelect.appendChild(option.cloneNode(true));
+                    analyzeSearchIndexSelect.appendChild(option);
+                });
+            } else {
+                console.warn('Failed to load search indexes:', data.message);
+                // Оставляем только опцию "Не использовать поиск"
+                const defaultOption = '<option value="">Не использовать поиск</option>';
+                searchIndexSelect.innerHTML = defaultOption;
+                analyzeSearchIndexSelect.innerHTML = defaultOption;
+            }
+        } catch (error) {
+            console.error('Error loading search indexes:', error);
+            // При ошибке оставляем базовую опцию
+            const defaultOption = '<option value="">Не использовать поиск</option>';
+            searchIndexSelect.innerHTML = defaultOption;
+            analyzeSearchIndexSelect.innerHTML = defaultOption;
+        }
+    }
 
     async function loadReplyStatus() {
         try {
