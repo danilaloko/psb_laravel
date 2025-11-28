@@ -26,6 +26,11 @@ class Thread extends Model
         return $this->hasMany(Email::class);
     }
 
+    public function generations(): HasMany
+    {
+        return $this->hasMany(Generation::class);
+    }
+
     public function isActive(): bool
     {
         return $this->status === 'active';
@@ -39,5 +44,36 @@ class Thread extends Model
     public function isArchived(): bool
     {
         return $this->status === 'archived';
+    }
+
+    public function getLatestReplyGeneration()
+    {
+        return $this->generations()->replies()->latest()->first();
+    }
+
+    public function hasReplyGeneration(): bool
+    {
+        return $this->generations()->replies()->exists();
+    }
+
+    public function getThreadContext(): string
+    {
+        $emails = $this->emails()->orderBy('received_at')->get();
+
+        $context = [];
+        foreach ($emails as $email) {
+            $direction = $email->from_address ? 'Входящее' : 'Исходящее';
+            $context[] = sprintf(
+                "[%s] %s <%s> - %s\nТема: %s\n%s",
+                $email->received_at?->format('d.m.Y H:i'),
+                $email->from_name ?? 'Неизвестно',
+                $email->from_address ?? 'неизвестно',
+                $direction,
+                $email->subject,
+                $email->content
+            );
+        }
+
+        return implode("\n\n---\n\n", $context);
     }
 }

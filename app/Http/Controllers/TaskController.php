@@ -167,4 +167,112 @@ class TaskController extends Controller
 
         return response()->json($response);
     }
+
+    public function generateReply(Request $request, Task $task)
+    {
+        // Проверяем права доступа (админы имеют доступ ко всем задачам)
+        $user = Auth::user();
+        if (!$user->isAdmin() && $task->executor_id !== $user->id && $task->creator_id !== $user->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'У вас нет доступа к этой задаче'
+            ], 403);
+        }
+
+        // Проверяем наличие thread
+        if (!$task->thread) {
+            return response()->json([
+                'success' => false,
+                'message' => 'У задачи нет потока для генерации ответа'
+            ], 400);
+        }
+
+        // Проверяем наличие писем в thread
+        if ($task->thread->emails()->count() === 0) {
+            return response()->json([
+                'success' => false,
+                'message' => 'В потоке задачи нет писем для генерации ответа'
+            ], 400);
+        }
+
+        try {
+            // Запускаем генерацию ответа
+            \App\Jobs\GenerateThreadReply::dispatch($task->thread);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Генерация ответа запущена'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Failed to start reply generation for task {$task->id}", [
+                'error' => $e->getMessage(),
+                'user_id' => $user->id
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Ошибка при запуске генерации ответа'
+            ], 500);
+        }
+    }
+
+    public function getReplyStatus(Task $task)
+    {
+        // Проверяем права доступа (админы имеют доступ ко всем задачам)
+        $user = Auth::user();
+        if (!$user->isAdmin() && $task->executor_id !== $user->id && $task->creator_id !== $user->id) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Нет доступа'
+            ], 403);
+        }
+
+        // Проверяем наличие thread
+        if (!$task->thread) {
+            return response()->json([
+                'status' => 'no_thread',
+                'message' => 'У задачи нет потока'
+            ]);
+        }
+
+        // Находим последнюю генерацию ответа для thread
+        $latestReply = $task->thread->getLatestReplyGeneration();
+
+        if (!$latestReply) {
+            return response()->json([
+                'status' => 'not_started',
+                'message' => 'Генерация не запускалась'
+            ]);
+        }
+
+        // Преобразуем статус из БД в статус для фронтенда
+        $isRecent = $latestReply->created_at->isAfter(now()->subMinutes(5));
+        $frontendStatus = $latestReply->status === 'success'
+            ? 'completed'
+            : ($isRecent && $latestReply->status !== 'error' ? 'processing' : $latestReply->status);
+
+        $response = [
+            'status' => $frontendStatus,
+            'created_at' => $latestReply->created_at->toISOString(),
+        ];
+
+        // Показываем данные генерации для последней генерации, если она успешна
+        if ($latestReply->status === 'success' && $latestReply->response && is_array($latestReply->response)) {
+            $response['reply'] = [
+                'text' => $latestReply->response['reply'] ?? '',
+                'processing_time' => $latestReply->processing_time,
+                'cost' => $latestReply->getCost(),
+                'model' => $latestReply->getModelName(),
+                'tokens' => $latestReply->getTotalTokens(),
+            ];
+        }
+
+        // Если есть ошибка, показываем сообщение
+        if ($latestReply->status === 'error' && $latestReply->error_message) {
+            $response['error_message'] = $latestReply->error_message;
+        }
+
+        return response()->json($response);
+    }
 }

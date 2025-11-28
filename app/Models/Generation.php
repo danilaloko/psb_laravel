@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Generation extends Model
 {
     protected $fillable = [
-        'email_id', 'prompt', 'response', 'processing_time',
+        'email_id', 'thread_id', 'type', 'prompt', 'response', 'processing_time',
         'status', 'error_message', 'metadata'
     ];
 
@@ -21,6 +21,11 @@ class Generation extends Model
     public function email(): BelongsTo
     {
         return $this->belongsTo(Email::class);
+    }
+
+    public function thread(): BelongsTo
+    {
+        return $this->belongsTo(Thread::class);
     }
 
     // Helper методы для доступа к metadata
@@ -55,5 +60,20 @@ class Generation extends Model
         return $query->where('status', 'success')
                     ->selectRaw('SUM(JSON_EXTRACT(metadata, "$.cost.amount")) as total_cost')
                     ->value('total_cost');
+    }
+
+    public function scopeReplies($query)
+    {
+        return $query->where('type', 'reply');
+    }
+
+    public function scopeAnalyses($query)
+    {
+        return $query->where('type', 'analysis');
+    }
+
+    public function scopeByThread($query, $threadId)
+    {
+        return $query->where('thread_id', $threadId);
     }
 }

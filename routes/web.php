@@ -25,6 +25,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/dashboard/task/{task}/status', [DashboardController::class, 'updateStatus'])->name('dashboard.task.status');
     Route::post('/dashboard/task/{task}/analyze-latest-email', [TaskController::class, 'analyzeLatestEmail'])->name('dashboard.task.analyze');
     Route::get('/dashboard/task/{task}/analysis-status', [TaskController::class, 'getAnalysisStatus'])->name('dashboard.task.analysis-status');
+    Route::post('/dashboard/task/{task}/generate-reply', [TaskController::class, 'generateReply'])->name('dashboard.task.generate-reply');
+    Route::get('/dashboard/task/{task}/reply-status', [TaskController::class, 'getReplyStatus'])->name('dashboard.task.reply-status');
     Route::get('/dashboard/email/{email}', [DashboardController::class, 'showEmail'])->name('dashboard.email.show');
     Route::post('/dashboard/email/{email}/analyze', [AIAnalysisController::class, 'processEmail'])->name('dashboard.email.analyze');
     Route::get('/dashboard/email/{email}/analysis-status', [AIAnalysisController::class, 'getAnalysisStatus'])->name('dashboard.email.analysis-status');

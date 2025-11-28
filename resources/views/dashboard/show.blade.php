@@ -145,6 +145,33 @@
                 </div>
             </div>
 
+            <!-- Generate Reply Section -->
+            <div class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Сгенерировать ответ</h3>
+                    <button id="generate-reply-btn" type="button" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span id="generate-reply-btn-text">Сгенерировать ответ</span>
+                    </button>
+                </div>
+
+                <!-- Reply Content -->
+                <div id="reply-content" class="hidden space-y-4">
+                    <div id="reply-status" class="text-sm text-gray-600 dark:text-gray-400"></div>
+                    <div id="reply-results" class="hidden">
+                        <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                            <div class="flex items-start justify-between mb-3">
+                                <h4 class="font-medium text-gray-900 dark:text-white">Сгенерированный ответ:</h4>
+                                <button id="copy-reply-btn" type="button" class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
+                                    Копировать
+                                </button>
+                            </div>
+                            <div id="reply-text" class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words"></div>
+                            <div id="reply-meta" class="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-600 pt-2 mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Status Update Form -->
             <div class="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Изменить статус:</h3>
@@ -175,10 +202,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const analysisStatus = document.getElementById('analysis-status');
     const analysisResults = document.getElementById('analysis-results');
 
+    // Reply generation elements
+    const generateReplyBtn = document.getElementById('generate-reply-btn');
+    const generateReplyBtnText = document.getElementById('generate-reply-btn-text');
+    const replyContent = document.getElementById('reply-content');
+    const replyStatus = document.getElementById('reply-status');
+    const replyResults = document.getElementById('reply-results');
+    const replyText = document.getElementById('reply-text');
+    const replyMeta = document.getElementById('reply-meta');
+    const copyReplyBtn = document.getElementById('copy-reply-btn');
+
     // CSRF token for AJAX requests
     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
     let pollingInterval = null;
+    let replyPollingInterval = null;
 
     // Analyze button click handler
     analyzeBtn.addEventListener('click', async function() {
@@ -213,16 +251,103 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // Generate reply button click handler
+    generateReplyBtn.addEventListener('click', async function() {
+        try {
+            setGeneratingReplyState(true);
+
+            const response = await fetch(`{{ route("dashboard.task.generate-reply", $task) }}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json'
+                }
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Ошибка при запуске генерации ответа');
+            }
+
+            showReplyContent();
+            updateReplyUI('processing');
+
+            // Start polling for reply status updates
+            startReplyPolling();
+
+        } catch (error) {
+            console.error('Reply generation start error:', error);
+            alert('Ошибка: ' + error.message);
+            setGeneratingReplyState(false);
+        }
+    });
+
+    // Copy reply button handler
+    copyReplyBtn.addEventListener('click', function() {
+        const textToCopy = replyText.textContent;
+        navigator.clipboard.writeText(textToCopy).then(function() {
+            // Show temporary success message
+            const originalText = copyReplyBtn.textContent;
+            copyReplyBtn.textContent = 'Скопировано!';
+            copyReplyBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            copyReplyBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+
+            setTimeout(() => {
+                copyReplyBtn.textContent = originalText;
+                copyReplyBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                copyReplyBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+            }, 2000);
+        }).catch(function(err) {
+            console.error('Failed to copy text: ', err);
+            alert('Не удалось скопировать текст');
+        });
+    });
+
     // Load initial analysis status
     loadAnalysisStatus();
+
+    // Load initial reply status
+    loadReplyStatus();
+
+    async function loadReplyStatus() {
+        try {
+            const response = await fetch(`{{ route("dashboard.task.reply-status", $task) }}`);
+            const data = await response.json();
+
+            console.log('Initial reply status:', data);
+
+            if (data.status !== 'not_started' && data.status !== 'no_thread') {
+                showReplyContent();
+                updateReplyUI(data.status, data.reply, data.error_message);
+
+                // Если генерация еще выполняется, запускаем polling
+                if (data.status === 'processing') {
+                    startReplyPolling();
+                }
+            }
+        } catch (error) {
+            console.error('Error loading reply status:', error);
+        }
+    }
 
     function setAnalyzingState(isAnalyzing) {
         analyzeBtn.disabled = isAnalyzing;
         analyzeBtnText.textContent = isAnalyzing ? 'Запуск...' : 'Запустить анализ';
     }
 
+    function setGeneratingReplyState(isGenerating) {
+        generateReplyBtn.disabled = isGenerating;
+        generateReplyBtnText.textContent = isGenerating ? 'Генерация...' : 'Сгенерировать ответ';
+    }
+
     function showAnalysisContent() {
         analysisContent.classList.remove('hidden');
+    }
+
+    function showReplyContent() {
+        replyContent.classList.remove('hidden');
     }
 
     function updateAnalysisUI(status, analysisData = null) {
@@ -342,6 +467,104 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
     }
 
+    function updateReplyUI(status, replyData = null, errorMessage = null) {
+        console.log('updateReplyUI called with status:', status, 'data:', replyData);
+
+        if (!status) {
+            console.warn('Status is undefined or null');
+            return;
+        }
+
+        setGeneratingReplyState(status === 'processing');
+
+        let statusText = '';
+        let statusClass = '';
+
+        switch (status) {
+            case 'processing':
+                statusText = '🔄 Генерация ответа...';
+                statusClass = 'text-blue-600 dark:text-blue-400';
+                break;
+            case 'completed':
+                statusText = `✅ Ответ сгенерирован (${replyData?.processing_time}s, ${replyData?.cost}₽)`;
+                statusClass = 'text-green-600 dark:text-green-400';
+                if (replyData) {
+                    showReplyResults(replyData);
+                }
+                stopReplyPolling();
+                break;
+            case 'error':
+                statusText = '❌ Ошибка генерации ответа';
+                if (errorMessage) {
+                    statusText += ': ' + errorMessage;
+                }
+                statusClass = 'text-red-600 dark:text-red-400';
+                setGeneratingReplyState(false);
+                stopReplyPolling();
+                break;
+            case 'not_started':
+                statusText = '📝 Генерация не запускалась';
+                statusClass = 'text-gray-600 dark:text-gray-400';
+                break;
+            case 'no_thread':
+                statusText = '📁 У задачи нет потока';
+                statusClass = 'text-gray-600 dark:text-gray-400';
+                break;
+            default:
+                statusText = 'Неизвестный статус';
+                statusClass = 'text-gray-600 dark:text-gray-400';
+        }
+
+        replyStatus.innerHTML = `<span class="${statusClass}">${statusText}</span>`;
+    }
+
+    function showReplyResults(data) {
+        replyResults.classList.remove('hidden');
+        replyText.textContent = data.text || '';
+        replyMeta.textContent = `Модель: ${data.model || 'N/A'} | Токены: ${data.tokens || 'N/A'}`;
+    }
+
+    function startReplyPolling() {
+        if (replyPollingInterval) {
+            clearInterval(replyPollingInterval);
+        }
+
+        let pollCount = 0;
+        const maxPolls = 60; // Максимум 2 минуты (60 * 2 секунды)
+
+        replyPollingInterval = setInterval(async () => {
+            try {
+                pollCount++;
+                const response = await fetch(`{{ route("dashboard.task.reply-status", $task) }}`);
+                const data = await response.json();
+
+                console.log(`Reply poll #${pollCount}:`, data);
+
+                updateReplyUI(data.status, data.reply, data.error_message);
+
+                // Останавливаем polling если генерация завершена или ошибка, или превышен лимит
+                if (data.status === 'completed' || data.status === 'error' || pollCount >= maxPolls) {
+                    stopReplyPolling();
+                    if (pollCount >= maxPolls) {
+                        console.warn('Reply polling timeout reached');
+                        updateReplyUI('error', null, 'Превышено время ожидания');
+                    }
+                }
+            } catch (error) {
+                console.error('Reply polling error:', error);
+                stopReplyPolling();
+                updateReplyUI('error', null, 'Ошибка при получении статуса');
+            }
+        }, 2000); // Poll every 2 seconds
+    }
+
+    function stopReplyPolling() {
+        if (replyPollingInterval) {
+            clearInterval(replyPollingInterval);
+            replyPollingInterval = null;
+        }
+    }
+
     async function loadAnalysisStatus() {
         try {
             const response = await fetch(`{{ route("dashboard.task.analysis-status", $task) }}`);
@@ -406,6 +629,12 @@ document.addEventListener('DOMContentLoaded', function() {
             pollingInterval = null;
         }
     }
+
+    // Make sure to clean up reply polling on page unload
+    window.addEventListener('beforeunload', function() {
+        stopPolling();
+        stopReplyPolling();
+    });
 });
 </script>
 @endsection
