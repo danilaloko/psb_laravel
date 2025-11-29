@@ -310,6 +310,146 @@
 
         </div>
 
+        <!-- BLOCK 4 — УПРАВЛЕНИЕ ПОДРАЗДЕЛЕНИЯМИ (ТОЛЬКО ДЛЯ АДМИНОВ) -->
+        @if(auth()->user()->isAdmin())
+
+        <div class="rounded-lg bg-white dark:bg-gray-800 shadow-xl p-8 space-y-6">
+
+            <!-- Сообщения об успехе/ошибках -->
+            @if(session('success'))
+                <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative" role="alert">
+                    <span class="block sm:inline">{{ session('success') }}</span>
+                </div>
+            @endif
+
+            @if(session('error'))
+                <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                    <span class="block sm:inline">{{ session('error') }}</span>
+                </div>
+            @endif
+
+            @if($errors->any())
+                <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                    <ul class="list-disc list-inside">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white">
+                    Управление подразделениями
+                </h3>
+                <span class="text-sm text-gray-500 dark:text-gray-400">
+                    {{ count($departments) }} подразделений
+                </span>
+            </div>
+
+            <!-- Создание нового подразделения -->
+            <div class="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700">
+                <h4 class="text-sm font-medium text-gray-900 dark:text-white mb-4">Создать новое подразделение</h4>
+
+                <form action="{{ route('settings.departments.store') }}" method="POST" class="space-y-4">
+                    @csrf
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Название подразделения *
+                            </label>
+                            <input type="text" id="name" name="name" value="{{ old('name') }}"
+                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600
+                                          bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg
+                                          focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                   placeholder="Например: Поддержка клиентов" required>
+                        </div>
+
+                        <div>
+                            <label for="code" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Код подразделения *
+                            </label>
+                            <input type="text" id="code" name="code" value="{{ old('code') }}"
+                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600
+                                          bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg
+                                          focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                   placeholder="Например: support" required>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="description" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Описание
+                        </label>
+                        <textarea id="description" name="description" rows="3"
+                                  class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600
+                                         bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg
+                                         focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                  placeholder="Описание деятельности подразделения">{{ old('description') }}</textarea>
+                    </div>
+
+                    <div class="flex justify-end">
+                        <button type="submit"
+                                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium
+                                       rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2
+                                       focus:ring-blue-500 focus:ring-opacity-50">
+                            Создать подразделение
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Список подразделений -->
+            @if(count($departments) > 0)
+                <div class="space-y-4">
+                    <h4 class="text-sm font-medium text-gray-900 dark:text-white">Существующие подразделения</h4>
+
+                    @foreach($departments as $department)
+                        <div class="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-white dark:bg-gray-700">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <div class="flex items-center space-x-3">
+                                        <h5 class="text-sm font-medium text-gray-900 dark:text-white">
+                                            {{ $department->name }}
+                                        </h5>
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                                                     {{ $department->is_active ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' : 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100' }}">
+                                            {{ $department->is_active ? 'Активно' : 'Неактивно' }}
+                                        </span>
+                                    </div>
+
+                                    @if($department->description)
+                                        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                                            {{ $department->description }}
+                                        </p>
+                                    @endif
+
+                                    <div class="mt-2 flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
+                                        <span>Пользователей: {{ $department->users()->count() }}</span>
+                                        <span>Задач: {{ $department->tasks()->count() }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            @else
+                <div class="text-center py-8">
+                    <div class="text-gray-400 dark:text-gray-500 text-4xl mb-4">🏢</div>
+                    <p class="text-gray-600 dark:text-gray-400">
+                        Нет созданных подразделений
+                    </p>
+                    <p class="text-sm text-gray-500 dark:text-gray-500 mt-2">
+                        Создайте первое подразделение выше
+                    </p>
+                </div>
+            @endif
+
+        </div>
+
+        @endif
+
     </div>
 
 </div>

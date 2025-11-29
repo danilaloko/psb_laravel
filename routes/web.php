@@ -44,6 +44,13 @@ Route::middleware('auth')->group(function () {
 
     // Настройки пользователя
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
+
+    // Управление подразделениями (только для админов)
+    Route::middleware(['auth'])->prefix('settings')->name('settings.')->group(function () {
+        Route::post('/departments', [SettingsController::class, 'storeDepartment'])->name('departments.store');
+        Route::put('/departments/{department}', [SettingsController::class, 'updateDepartment'])->name('departments.update');
+        Route::delete('/departments/{department}', [SettingsController::class, 'destroyDepartment'])->name('departments.destroy');
+    });
 });
 
 // Админ панель

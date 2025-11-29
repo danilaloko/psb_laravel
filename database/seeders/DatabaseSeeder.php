@@ -57,6 +57,9 @@ class DatabaseSeeder extends Seeder
         // Создаем потоки и письма
         $this->call(EmailSeeder::class);
 
+        // Создаем подразделения
+        $this->call(DepartmentSeeder::class);
+
         // Создаем задачи
         $this->call(TaskSeeder::class);
     }
