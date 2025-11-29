@@ -43,13 +43,13 @@ class Department extends Model
     }
 
     /**
-     * Задачи подразделения
+     * Задачи подразделения (через пользователей)
      */
-    public function tasks(): HasMany
+    public function tasks()
     {
-        return $this->hasMany(Task::class, 'executor_id', 'id')
-            ->join('users', 'tasks.executor_id', '=', 'users.id')
-            ->where('users.department_id', $this->id);
+        return Task::whereHas('executor', function ($query) {
+            $query->where('department_id', $this->id);
+        });
     }
 
     /**

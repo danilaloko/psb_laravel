@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Task;
 use App\Models\Email;
+use App\Models\Department;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -13,12 +14,21 @@ class DashboardController extends Controller
     {
         $user = Auth::user();
         $isAdmin = $user->isAdmin();
+        $isDepartmentAdmin = $user->isDepartmentAdmin();
 
-        // Базовый запрос для фильтрации
+        // Базовый запрос для фильтрации с учетом прав доступа
         $baseQuery = Task::query();
 
-        // Для обычных пользователей показывать только их задачи
-        if (!$isAdmin) {
+        if ($isAdmin) {
+            // Полный админ видит все задачи
+            // Базовый запрос остается без ограничений
+        } elseif ($isDepartmentAdmin) {
+            // Админ подразделения видит все задачи своего подразделения
+            $baseQuery->whereHas('executor', function ($q) use ($user) {
+                $q->where('department_id', $user->department_id);
+            });
+        } else {
+            // Обычный пользователь видит только свои задачи
             $baseQuery->where('executor_id', $user->id);
         }
 
@@ -26,10 +36,18 @@ class DashboardController extends Controller
         $statsQuery = clone $baseQuery;
 
         // Применяем фильтры к основному запросу
-        $query = Task::with(['thread', 'creator', 'executor']);
+        $query = Task::with(['thread', 'creator', 'executor.department']);
 
-        // Для обычных пользователей показывать только их задачи
-        if (!$isAdmin) {
+        // Применяем те же ограничения доступа к основному запросу
+        if ($isAdmin) {
+            // Полный админ видит все задачи
+        } elseif ($isDepartmentAdmin) {
+            // Админ подразделения видит все задачи своего подразделения
+            $query->whereHas('executor', function ($q) use ($user) {
+                $q->where('department_id', $user->department_id);
+            });
+        } else {
+            // Обычный пользователь видит только свои задачи
             $query->where('executor_id', $user->id);
         }
 
@@ -44,10 +62,20 @@ class DashboardController extends Controller
             $statsQuery->where('priority', $request->priority);
         }
 
-        // Фильтр по исполнителю для админов
-        if ($isAdmin && $request->filled('executor_id')) {
+        // Фильтр по исполнителю для админов и админов подразделений
+        if (($isAdmin || $isDepartmentAdmin) && $request->filled('executor_id')) {
             $query->where('executor_id', $request->executor_id);
             $statsQuery->where('executor_id', $request->executor_id);
+        }
+
+        // Фильтр по подразделению
+        if ($request->filled('department_id')) {
+            $query->whereHas('executor', function ($q) use ($request) {
+                $q->where('department_id', $request->department_id);
+            });
+            $statsQuery->whereHas('executor', function ($q) use ($request) {
+                $q->where('department_id', $request->department_id);
+            });
         }
 
         $tasks = $query->orderBy('created_at', 'desc')->paginate(15)->withQueryString();
@@ -61,22 +89,59 @@ class DashboardController extends Controller
             'cancelled' => (clone $statsQuery)->where('status', 'cancelled')->count(),
         ];
 
-        // Список исполнителей для фильтра админов
-        $executors = $isAdmin ? \App\Models\User::where('role', 'user')->get() : collect();
+        // Список исполнителей для фильтра админов и админов подразделений
+        if ($isAdmin) {
+            $executors = \App\Models\User::where('role', 'user')->get();
+        } elseif ($isDepartmentAdmin) {
+            // Админ подразделения видит только пользователей своего подразделения
+            $executors = \App\Models\User::where('department_id', $user->department_id)
+                ->where('role', 'user')
+                ->get();
+        } else {
+            $executors = collect();
+        }
 
-        return view('dashboard.index', compact('tasks', 'stats', 'executors', 'isAdmin'));
+        // Список подразделений для фильтра
+        if ($isAdmin) {
+            $departments = Department::active()->get();
+        } elseif ($isDepartmentAdmin) {
+            // Админ подразделения видит только свое подразделение
+            $departments = $user->department_id 
+                ? Department::where('id', $user->department_id)->get() 
+                : collect();
+        } else {
+            // Для обычных пользователей показываем только их подразделение
+            $departments = $user->department_id 
+                ? Department::where('id', $user->department_id)->get() 
+                : collect();
+        }
+
+        return view('dashboard.index', compact('tasks', 'stats', 'executors', 'departments', 'isAdmin'));
     }
 
     public function show(Task $task)
     {
         $user = Auth::user();
 
-        // Обычные пользователи могут видеть только свои задачи
-        if (!$user->isAdmin() && $task->executor_id !== $user->id) {
-            abort(403);
+        // Загружаем executor для проверки доступа
+        $task->load('executor');
+
+        // Проверка доступа к задаче
+        if ($user->isAdmin()) {
+            // Полный админ видит все задачи
+        } elseif ($user->isDepartmentAdmin()) {
+            // Админ подразделения видит задачи своего подразделения
+            if (!$task->executor || $task->executor->department_id !== $user->department_id) {
+                abort(403);
+            }
+        } else {
+            // Обычный пользователь видит только свои задачи
+            if ($task->executor_id !== $user->id) {
+                abort(403);
+            }
         }
 
-        $task->load(['thread', 'creator', 'executor', 'thread.emails']);
+        $task->load(['thread', 'creator', 'thread.emails']);
 
         return view('dashboard.show', compact('task'));
     }
@@ -85,9 +150,22 @@ class DashboardController extends Controller
     {
         $user = Auth::user();
 
-        // Обычные пользователи могут обновлять только свои задачи
-        if (!$user->isAdmin() && $task->executor_id !== $user->id) {
-            abort(403);
+        // Загружаем executor для проверки доступа
+        $task->load('executor');
+
+        // Проверка доступа к задаче
+        if ($user->isAdmin()) {
+            // Полный админ может обновлять все задачи
+        } elseif ($user->isDepartmentAdmin()) {
+            // Админ подразделения может обновлять задачи своего подразделения
+            if (!$task->executor || $task->executor->department_id !== $user->department_id) {
+                abort(403);
+            }
+        } else {
+            // Обычный пользователь может обновлять только свои задачи
+            if ($task->executor_id !== $user->id) {
+                abort(403);
+            }
         }
 
         $request->validate([
@@ -104,12 +182,26 @@ class DashboardController extends Controller
         $user = Auth::user();
 
         // Проверяем доступ к письму через задачу
-        $task = Task::whereHas('thread', function($query) use ($email) {
-            $query->where('id', $email->thread_id);
-        })->where('executor_id', $user->id)->first();
+        if ($user->isAdmin()) {
+            // Полный админ видит все письма
+            $task = Task::whereHas('thread', function($query) use ($email) {
+                $query->where('id', $email->thread_id);
+            })->first();
+        } elseif ($user->isDepartmentAdmin()) {
+            // Админ подразделения видит письма из задач своего подразделения
+            $task = Task::whereHas('thread', function($query) use ($email) {
+                $query->where('id', $email->thread_id);
+            })->whereHas('executor', function($q) use ($user) {
+                $q->where('department_id', $user->department_id);
+            })->first();
+        } else {
+            // Обычный пользователь видит только письма из своих задач
+            $task = Task::whereHas('thread', function($query) use ($email) {
+                $query->where('id', $email->thread_id);
+            })->where('executor_id', $user->id)->first();
+        }
 
-        // Обычные пользователи могут видеть только письма из своих задач
-        if (!$user->isAdmin() && !$task) {
+        if (!$task) {
             abort(403);
         }
 

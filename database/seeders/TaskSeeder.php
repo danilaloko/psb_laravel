@@ -14,7 +14,8 @@ class TaskSeeder extends Seeder
      */
     public function run(): void
     {
-        $users = User::all();
+        // Получаем только пользователей из подразделений
+        $users = User::whereNotNull('department_id')->get();
         $threads = Thread::all();
 
         if ($users->isEmpty() || $threads->isEmpty()) {
@@ -38,12 +39,16 @@ class TaskSeeder extends Seeder
         $priorities = ['low', 'medium', 'high', 'urgent'];
 
         foreach ($users as $user) {
-            // Создаем 3-10 задач для каждого пользователя
+            // Создаем 3-10 задач для каждого пользователя из подразделения
             $taskCount = rand(3, 10);
 
             for ($i = 0; $i < $taskCount; $i++) {
                 $thread = $threads->random();
-                $creator = $users->random();
+                // Создатель задачи может быть любым пользователем из подразделения или админом
+                $creator = User::where(function ($query) use ($user) {
+                    $query->where('department_id', $user->department_id)
+                          ->orWhere('role', 'admin');
+                })->inRandomOrder()->first();
 
                 Task::create([
                     'title' => fake()->randomElement($titles),

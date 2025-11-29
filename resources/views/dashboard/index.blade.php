@@ -121,7 +121,7 @@
                 </select>
             </div>
 
-            @if($isAdmin ?? false)
+            @if(count($executors ?? []) > 0)
             <div class="flex-1 min-w-[200px]">
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Исполнитель</label>
                 <select name="executor_id" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500">
@@ -135,11 +135,25 @@
             </div>
             @endif
 
+            @if(count($departments ?? []) > 0)
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Подразделение</label>
+                <select name="department_id" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-blue-500 focus:border-blue-500">
+                    <option value="">Все подразделения</option>
+                    @foreach($departments as $department)
+                    <option value="{{ $department->id }}" {{ request('department_id') == $department->id ? 'selected' : '' }}>
+                        {{ $department->name }}
+                    </option>
+                    @endforeach
+                </select>
+            </div>
+            @endif
+
             <div class="flex items-end gap-2">
                 <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
                     Применить
                 </button>
-                @if(request()->hasAny(['status', 'priority', 'executor_id']))
+                @if(request()->hasAny(['status', 'priority', 'executor_id', 'department_id']))
                 <a href="{{ route('dashboard') }}" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
                     Сбросить фильтры
                 </a>
@@ -196,6 +210,10 @@
                                         @endif
                                         @if($isAdmin ?? false && $task->executor)
                                             <span>Исполнитель: {{ $task->executor->name }}</span>
+                                            @if($task->executor->department)
+                                                <span>•</span>
+                                                <span>Подразделение: {{ $task->executor->department->name }}</span>
+                                            @endif
                                             <span>•</span>
                                         @endif
                                         @if($task->creator)
