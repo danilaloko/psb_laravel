@@ -362,15 +362,33 @@ class CreateTasksFromAnalysis implements ShouldQueue
 
     protected function parseDueDate(array $analysis): ?Carbon
     {
-        $deadline = $analysis['deadline'] ?? $analysis['processing_requirements']['sla_deadline'] ?? null;
+        // Получаем количество часов из анализа (новый формат)
+        $deadlineHours = $analysis['deadline_hours'] ?? $analysis['processing_requirements']['sla_deadline_hours'] ?? null;
 
-        if ($deadline) {
+        if ($deadlineHours !== null && is_numeric($deadlineHours)) {
+            $hours = (int) $deadlineHours;
+            
+            // Проверяем разумность значения (от 1 часа до 1 года)
+            if ($hours > 0 && $hours <= 8760) { // 8760 часов = 365 дней
+                return now()->addHours($hours);
+            } else {
+                Log::warning("Invalid deadline_hours value", [
+                    'deadline_hours' => $hours,
+                    'generation_id' => $this->generation->id ?? null
+                ]);
+            }
+        }
+
+        // Обратная совместимость: если ИИ вернул старое поле deadline (ISO datetime)
+        $oldDeadline = $analysis['deadline'] ?? $analysis['processing_requirements']['sla_deadline'] ?? null;
+        if ($oldDeadline && is_string($oldDeadline)) {
             try {
-                return Carbon::parse($deadline);
+                return Carbon::parse($oldDeadline);
             } catch (\Exception $e) {
-                Log::warning("Failed to parse due date", [
-                    'deadline' => $deadline,
-                    'error' => $e->getMessage()
+                Log::warning("Failed to parse legacy deadline format", [
+                    'deadline' => $oldDeadline,
+                    'error' => $e->getMessage(),
+                    'generation_id' => $this->generation->id ?? null
                 ]);
             }
         }

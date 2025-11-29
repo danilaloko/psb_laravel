@@ -335,7 +335,15 @@ class GenerateThreadReply implements ShouldQueue
                     $formality = $formalityMap[$requirements['response_formality_level']] ?? $requirements['response_formality_level'];
                     $analysisText .= "Уровень формальности ответа: {$formality}\n";
                 }
-                if (!empty($requirements['sla_deadline'])) {
+                // Новый формат: sla_deadline_hours (количество часов)
+                $slaDeadlineHours = $requirements['sla_deadline_hours'] ?? null;
+                if ($slaDeadlineHours !== null && is_numeric($slaDeadlineHours)) {
+                    $hours = (int) $slaDeadlineHours;
+                    $dueDate = now()->addHours($hours);
+                    $analysisText .= "SLA дедлайн: {$hours} часов (до {$dueDate->format('d.m.Y H:i')})\n";
+                }
+                // Обратная совместимость: старый формат
+                elseif (!empty($requirements['sla_deadline'])) {
                     $analysisText .= "SLA дедлайн: {$requirements['sla_deadline']}\n";
                 }
             }

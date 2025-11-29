@@ -193,8 +193,17 @@ class TestAIProcessing extends Command
                 }
             }
 
-            if (!empty($response['deadline'])) {
-                $this->line("   ⏰ <info>Срок выполнения:</info> {$response['deadline']}");
+            // Новый формат: deadline_hours (количество часов)
+            $deadlineHours = $response['deadline_hours'] ?? $response['processing_requirements']['sla_deadline_hours'] ?? null;
+            if ($deadlineHours !== null && is_numeric($deadlineHours)) {
+                $hours = (int) $deadlineHours;
+                $dueDate = now()->addHours($hours);
+                $this->line("   ⏰ <info>Срок выполнения:</info> {$hours} часов (до {$dueDate->format('d.m.Y H:i')})");
+            }
+            
+            // Обратная совместимость: старый формат deadline (ISO datetime)
+            if (empty($deadlineHours) && !empty($response['deadline'])) {
+                $this->line("   ⏰ <info>Срок выполнения (legacy):</info> {$response['deadline']}");
             }
         } else {
             $this->line("   <error>❌ Ошибка парсинга ответа AI</error>");

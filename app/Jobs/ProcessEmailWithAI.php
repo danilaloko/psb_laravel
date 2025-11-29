@@ -260,7 +260,7 @@ class ProcessEmailWithAI implements ShouldQueue
             'action_required' => 'boolean',
             'suggested_response' => 'string',
             'key_points' => 'array',
-            'deadline' => 'ISO datetime or null',
+            'deadline_hours' => 'integer or null - количество часов на выполнение задачи (например, 24 для суток, 72 для трех дней)',
 
             // Новые поля для задач
             'task_title' => 'string - краткое название задачи (3-7 слов)',
@@ -277,7 +277,7 @@ class ProcessEmailWithAI implements ShouldQueue
 
             // Критичные параметры обработки
             'processing_requirements' => [
-                'sla_deadline' => 'ISO datetime - calculated based on request type',
+                'sla_deadline_hours' => 'integer or null - количество часов на выполнение задачи согласно SLA (например, 2 для срочных, 24 для обычных)',
                 'response_formality_level' => 'high|medium|low - required tone formality',
                 'approval_departments' => ['array of department names requiring verification'],
                 'legal_risks' => [
@@ -585,7 +585,7 @@ class ProcessEmailWithAI implements ShouldQueue
             'action_required' => true,
             'suggested_response' => 'Требуется ручная обработка',
             'key_points' => ['Анализ не удался'],
-            'deadline' => null,
+            'deadline_hours' => null,
 
             // Новые поля для задач
             'task_title' => 'Анализ входящего письма',
@@ -602,7 +602,7 @@ class ProcessEmailWithAI implements ShouldQueue
 
             // Параметры обработки
             'processing_requirements' => [
-                'sla_deadline' => null,
+                'sla_deadline_hours' => null,
                 'response_formality_level' => 'medium',
                 'approval_departments' => [],
                 'legal_risks' => [
@@ -679,7 +679,7 @@ class ProcessEmailWithAI implements ShouldQueue
             'action_required' => false,
             'suggested_response' => 'Не требует ответа',
             'key_points' => ['Спам или не соответствующее письмо'],
-            'deadline' => null,
+            'deadline_hours' => null,
 
             // Новые поля для задач (для спама - минимальные значения)
             'task_title' => 'Спам или нерелевантное письмо',
@@ -694,7 +694,7 @@ class ProcessEmailWithAI implements ShouldQueue
                 'communication_channel' => 'informal'
             ],
             'processing_requirements' => [
-                'sla_deadline' => null,
+                'sla_deadline_hours' => null,
                 'response_formality_level' => 'low',
                 'approval_departments' => [],
                 'legal_risks' => [
@@ -1083,15 +1083,33 @@ class ProcessEmailWithAI implements ShouldQueue
 
     protected function parseDueDate(array $analysis): ?Carbon
     {
-        $deadline = $analysis['deadline'] ?? $analysis['processing_requirements']['sla_deadline'] ?? null;
+        // Получаем количество часов из анализа (новый формат)
+        $deadlineHours = $analysis['deadline_hours'] ?? $analysis['processing_requirements']['sla_deadline_hours'] ?? null;
 
-        if ($deadline) {
+        if ($deadlineHours !== null && is_numeric($deadlineHours)) {
+            $hours = (int) $deadlineHours;
+            
+            // Проверяем разумность значения (от 1 часа до 1 года)
+            if ($hours > 0 && $hours <= 8760) { // 8760 часов = 365 дней
+                return now()->addHours($hours);
+            } else {
+                Log::warning("Invalid deadline_hours value", [
+                    'deadline_hours' => $hours,
+                    'email_id' => $this->email->id
+                ]);
+            }
+        }
+
+        // Обратная совместимость: если ИИ вернул старое поле deadline (ISO datetime)
+        $oldDeadline = $analysis['deadline'] ?? $analysis['processing_requirements']['sla_deadline'] ?? null;
+        if ($oldDeadline && is_string($oldDeadline)) {
             try {
-                return Carbon::parse($deadline);
+                return Carbon::parse($oldDeadline);
             } catch (\Exception $e) {
-                Log::warning("Failed to parse due date", [
-                    'deadline' => $deadline,
-                    'error' => $e->getMessage()
+                Log::warning("Failed to parse legacy deadline format", [
+                    'deadline' => $oldDeadline,
+                    'error' => $e->getMessage(),
+                    'email_id' => $this->email->id
                 ]);
             }
         }
