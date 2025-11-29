@@ -58,6 +58,12 @@ class ProcessEmailWithAI implements ShouldQueue
             // Парсим ответ от Yandex AI
             $parsedResponse = $this->parseYandexResponse($response);
 
+            // Проверяем на спам - если спам, создаем упрощенный ответ
+            if (($parsedResponse['spam_check'] ?? 0) === 1) {
+                $parsedResponse = $this->createSpamResponse();
+                Log::info("Email {$this->email->id} identified as spam, skipping detailed analysis");
+            }
+
             // Сохраняем результат с информацией о поиске
             $generation = $this->saveGeneration($parsedResponse, $processingTime, $modelConfig, $response, $searchResults);
 
@@ -204,6 +210,9 @@ class ProcessEmailWithAI implements ShouldQueue
     protected function getResponseFormat(): string
     {
         return json_encode([
+            // Проверка на спам и релевантность (0 - все ок, генерировать анализ; 1 - спам/не соответствующее, не генерировать остальные поля)
+            'spam_check' => 'integer (0|1) - проверка на спам, ненужную информацию или не соответствующую почте банка',
+
             // Существующие параметры для обратной совместимости
             'summary' => 'string',
             'priority' => 'high|medium|low',
@@ -321,6 +330,7 @@ class ProcessEmailWithAI implements ShouldQueue
             'response' => $parsedResponse, // Уже распарсенный JSON
             'processing_time' => $processingTime,
             'status' => 'success',
+            'is_spam' => ($parsedResponse['spam_check'] ?? 0) === 1,
             'metadata' => array_merge([
                 'model' => [
                     'name' => $modelConfig['model'],
@@ -403,12 +413,26 @@ class ProcessEmailWithAI implements ShouldQueue
         $fallback = $this->getFallbackResponse();
 
         // Рекурсивно сливаем массивы, сохраняя существующие значения
-        return array_replace_recursive($fallback, $parsed);
+        $validated = array_replace_recursive($fallback, $parsed);
+
+        // Валидируем поле spam_check
+        if (!isset($validated['spam_check']) || !in_array($validated['spam_check'], [0, 1])) {
+            $validated['spam_check'] = 0; // По умолчанию считаем нормальным письмом
+            Log::warning('Invalid or missing spam_check value, defaulting to 0', [
+                'email_id' => $this->email->id,
+                'original_value' => $parsed['spam_check'] ?? null
+            ]);
+        }
+
+        return $validated;
     }
 
     protected function getFallbackResponse(): array
     {
         return [
+            // Проверка на спам
+            'spam_check' => 0, // По умолчанию считаем нормальным письмом
+
             // Существующие параметры
             'summary' => 'Не удалось проанализировать письмо',
             'priority' => 'medium',
@@ -489,6 +513,88 @@ class ProcessEmailWithAI implements ShouldQueue
                 'immediate_actions' => ['Провести ручной анализ'],
                 'follow_up_actions' => [],
                 'preventive_measures' => []
+            ]
+        ];
+    }
+
+    protected function createSpamResponse(): array
+    {
+        return [
+            // Пометка как спам
+            'spam_check' => 1,
+
+            // Минимальные поля для совместимости
+            'summary' => 'Письмо помечено как спам или не соответствующее',
+            'priority' => 'low',
+            'category' => 'information',
+            'sentiment' => 'neutral',
+            'action_required' => false,
+            'suggested_response' => 'Не требует ответа',
+            'key_points' => ['Спам или не соответствующее письмо'],
+            'deadline' => null,
+
+            // Пустые структуры для остальных полей
+            'classification' => [
+                'primary_type' => 'information_request',
+                'secondary_type' => 'status_update',
+                'business_context' => 'operational',
+                'communication_channel' => 'informal'
+            ],
+            'processing_requirements' => [
+                'sla_deadline' => null,
+                'response_formality_level' => 'low',
+                'approval_departments' => [],
+                'legal_risks' => [
+                    'risk_level' => 'none',
+                    'risk_factors' => [],
+                    'recommended_actions' => []
+                ],
+                'escalation_required' => false,
+                'escalation_level' => 'none'
+            ],
+            'content_analysis' => [
+                'core_request' => 'Не требует обработки',
+                'contact_information' => [
+                    'sender_details' => [
+                        'name' => '',
+                        'position' => '',
+                        'organization' => '',
+                        'phone' => '',
+                        'additional_contacts' => []
+                    ],
+                    'mentioned_parties' => []
+                ],
+                'regulatory_references' => [
+                    'laws_and_regulations' => [],
+                    'contract_references' => [],
+                    'deadline_mentions' => []
+                ],
+                'requirements_and_expectations' => [
+                    'explicit_requirements' => [],
+                    'implicit_expectations' => [],
+                    'preferred_outcome' => '',
+                    'acceptable_alternatives' => []
+                ]
+            ],
+            'metadata_analysis' => [
+                'document_requests' => [
+                    'document_types' => [],
+                    'urgency_level' => 'low',
+                    'format_requirements' => []
+                ],
+                'stakeholder_analysis' => [
+                    'affected_parties' => []
+                ],
+                'compliance_indicators' => [
+                    'gdpr_relevant' => false,
+                    'data_processing_required' => false,
+                    'confidentiality_level' => 'public'
+                ]
+            ],
+            'action_recommendations' => [
+                'immediate_actions' => ['Отклонить письмо'],
+                'follow_up_actions' => [],
+                'preventive_measures' => ['Добавить отправителя в фильтр спама']
             ]
         ];
     }

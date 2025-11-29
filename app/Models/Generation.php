@@ -9,7 +9,7 @@ class Generation extends Model
 {
     protected $fillable = [
         'email_id', 'thread_id', 'type', 'prompt', 'response', 'processing_time',
-        'status', 'error_message', 'metadata'
+        'status', 'error_message', 'metadata', 'is_spam'
     ];
 
     protected $casts = [
@@ -77,8 +77,23 @@ class Generation extends Model
         return $query->where('type', 'analysis');
     }
 
+    public function scopeSpam($query)
+    {
+        return $query->where('is_spam', true);
+    }
+
+    public function scopeNotSpam($query)
+    {
+        return $query->where('is_spam', false);
+    }
+
     public function scopeByThread($query, $threadId)
     {
         return $query->where('thread_id', $threadId);
+    }
+
+    public function isSpam(): bool
+    {
+        return $this->is_spam ?? false;
     }
 }
