@@ -31,108 +31,180 @@
 
         <!-- HEADER -->
 
-        <div>
-
-            <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
-
-                Настройки пользователя
-
-            </h2>
-
-            <p class="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
-
-                Ваши данные учетной записи
-
-            </p>
-
-        </div>
-
-        <!-- BLOCK 1 — НЕИЗМЕНЯЕМЫЕ ДАННЫЕ -->
+        <!-- BLOCK 5 — УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ (ТОЛЬКО ДЛЯ АДМИНОВ) -->
+        @if(auth()->user()->isAdmin())
 
         <div class="rounded-lg bg-white dark:bg-gray-800 shadow-xl p-8 space-y-6">
 
-            <!-- Login -->
+            <!-- Сообщения об успехе/ошибках -->
+            @if(session('success'))
+                <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative" role="alert">
+                    <span class="block sm:inline">{{ session('success') }}</span>
+                </div>
+            @endif
 
-            <div>
+            @if(session('error'))
+                <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                    <span class="block sm:inline">{{ session('error') }}</span>
+                </div>
+            @endif
 
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            @if($errors->any())
+                <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                    <ul class="list-disc list-inside">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
 
-                    Логин
-
-                </label>
-
-                <input type="text"
-
-                       value="{{ auth()->user()->email ?? 'user@example.com' }}"
-
-                       readonly
-
-                       class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600
-
-                              text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-700
-
-                              rounded-lg focus:outline-none sm:text-sm select-all cursor-text">
-
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white">
+                    Управление пользователями
+                </h3>
             </div>
 
-            
+            <!-- Создание нового пользователя -->
+            <div class="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700">
+                <h4 class="text-sm font-medium text-gray-900 dark:text-white mb-4">Создать нового пользователя</h4>
 
-        <div class="relative">
+                <form action="{{ route('settings.users.store') }}" method="POST" class="space-y-4">
+                    @csrf
 
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                ФИО *
+                            </label>
+                            <input type="text" id="name" name="name" value="{{ old('name') }}"
+                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600
+                                          bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg
+                                          focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                   placeholder="Иванов Иван Иванович" required>
+                        </div>
 
-                Пароль
+                        <div>
+                            <label for="status" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                                Статус *
+                            </label>
+                            <div class="mt-2 space-y-2">
+                                <div class="flex items-center">
+                                    <input id="status_admin" name="status" type="radio" value="admin"
+                                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                                           {{ old('status') === 'admin' ? 'checked' : '' }}>
+                                    <label for="status_admin" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">
+                                        Админ
+                                    </label>
+                                </div>
+                                <div class="flex items-center">
+                                    <input id="status_department_admin" name="status" type="radio" value="department_admin"
+                                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                                           {{ old('status') === 'department_admin' ? 'checked' : '' }}>
+                                    <label for="status_department_admin" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">
+                                        Админ подразделения
+                                    </label>
+                                </div>
+                                <div class="flex items-center">
+                                    <input id="status_regular_user" name="status" type="radio" value="regular_user"
+                                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                                           {{ old('status') === 'regular_user' ? 'checked' : '' }}>
+                                    <label for="status_regular_user" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">
+                                        Обычный пользователь
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
-            </label>
+                    <div id="department_field" class="{{ in_array(old('status'), ['admin']) ? 'hidden' : '' }}">
+                        <label for="department_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Подразделение *
+                        </label>
+                        <select id="department_id" name="department_id"
+                                class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600
+                                       bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                                       rounded-lg focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            <option value="">Выберите подразделение</option>
+                            @foreach($departments as $department)
+                                <option value="{{ $department->id }}" {{ old('department_id') == $department->id ? 'selected' : '' }}>
+                                    {{ $department->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
 
-            <div class="relative">
-
-                <input type="text"
-
-                    value="********"
-
-                    readonly
-
-                    class="mt-1 block w-full px-3 py-2 pr-24 border border-gray-300 dark:border-gray-600
-
-                            text-gray-900 dark:text-white input-dark
-
-                            rounded-lg focus:outline-none sm:text-sm select-all cursor-text"
-
-                    id="password-field">
-
-                
-
-                <button type="button"
-
-                        class="absolute right-2 top-1/2 transform -translate-y-1/2 
-
-                            px-3 py-1 bg-blue-500/30 hover:bg-blue-500/50 
-
-                            text-blue-700 dark:text-blue-300 text-xs font-medium
-
-                            rounded-md border border-blue-400/30 transition-all duration-200
-
-                            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-
-                        onclick="copyPassword()">
-
-                    Копировать
-
-                </button>
-
+                    <div class="flex justify-end">
+                        <button type="submit"
+                                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium
+                                       rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2
+                                       focus:ring-blue-500 focus:ring-opacity-50">
+                            Создать пользователя
+                        </button>
+                    </div>
+                </form>
             </div>
+
+            <!-- Показать ссылку на xpaste с учетными данными -->
+            @if(session('user_credentials_url'))
+                <div class="border border-green-200 dark:border-green-600 rounded-lg p-4 bg-green-50 dark:bg-green-900/20">
+                    <h4 class="text-sm font-medium text-green-900 dark:text-green-100 mb-3">
+                        Пользователь "{{ session('user_name') }}" создан успешно!
+                    </h4>
+                    <div class="space-y-3 text-sm">
+                        <div>
+                            <span class="text-gray-600 dark:text-gray-400 block mb-1">Учетные данные сохранены в заметке:</span>
+                            <div class="flex items-center gap-2 mt-2">
+                                <a href="{{ session('user_credentials_url') }}" 
+                                   target="_blank"
+                                   class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium break-all underline">
+                                    {{ session('user_credentials_url') }}
+                                </a>
+                                <button type="button"
+                                        data-url="{{ session('user_credentials_url') }}"
+                                        onclick="copyToClipboard(this.dataset.url, this)"
+                                        class="px-2 py-1 bg-blue-500/30 hover:bg-blue-500/50 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-md border border-blue-400/30 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
+                                    Копировать
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                        Откройте ссылку, чтобы получить логин и пароль для входа в систему
+                    </div>
+                </div>
+            @elseif(session('user_credentials'))
+                <!-- Fallback: показать данные напрямую, если не удалось создать заметку -->
+                <div class="border border-yellow-200 dark:border-yellow-600 rounded-lg p-4 bg-yellow-50 dark:bg-yellow-900/20">
+                    @if(session('warning'))
+                        <div class="text-yellow-800 dark:text-yellow-200 text-sm mb-3">{{ session('warning') }}</div>
+                    @endif
+                    <h4 class="text-sm font-medium text-yellow-900 dark:text-yellow-100 mb-3">Пользователь создан успешно!</h4>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600 dark:text-gray-400">Имя:</span>
+                            <span class="text-yellow-900 dark:text-yellow-100 font-medium">{{ session('user_credentials')['name'] }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600 dark:text-gray-400">Email (логин):</span>
+                            <span class="text-yellow-900 dark:text-yellow-100 font-medium">{{ session('user_credentials')['email'] }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600 dark:text-gray-400">Пароль:</span>
+                            <span class="text-yellow-900 dark:text-yellow-100 font-medium">{{ session('user_credentials')['password'] }}</span>
+                        </div>
+                    </div>
+                    <div class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                        Сохраните эти данные - они нужны для входа в систему
+                    </div>
+                </div>
+            @endif
 
         </div>
 
-            <p class="text-xs text-gray-500 dark:text-gray-400">
+        @endif
 
-                Эти данные нельзя изменить вручную. Чтобы изменить пароль — обратитесь к администратору.
-
-            </p>
-
-        </div>
-
+ 
         <!-- BLOCK 2 — ПОИСКОВЫЕ ИНДЕКСЫ -->
 
         <div class="rounded-lg bg-white dark:bg-gray-800 shadow-xl p-8 space-y-6">
@@ -240,76 +312,7 @@
 
         </div>
 
-        <!-- BLOCK 3 — EMPLOYEE TYPE + NAME -->
-
-        <div class="rounded-lg bg-white dark:bg-gray-800 shadow-xl p-8 space-y-6">
-
-            <!-- SELECT EMPLOYEE TYPE -->
-
-            <div>
-
-                <label for="employee_type" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-
-                    Тип отдела
-
-                </label>
-
-                <select id="employee_type" name="employee_type"
-
-                        class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600
-
-                               bg-white dark:bg-gray-700 text-gray-900 dark:text-white
-
-                               rounded-lg focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-
-                    <option value="">Выберите тип</option>
-
-                    <option value="manager">Менеджмент по работе с клиентами</option>
-
-                    <option value="client_service">Клиентский сервис</option>
-
-                    <option value="legal_department">Юридический отдел</option>
-
-                    <option value="security_department">Кассир</option>
-
-                    <option value="credit_department">Кредитный отдел</option>
-
-                    <option value="secretary">Секретарь</option>
-
-                    <option value="operator">Оператор</option>
-
-                    <option value="analytics_department">Аналитический отдел</option>
-
-                    <option value="advisor">Финансовый консультант</option>
-
-                </select>
-
-            </div>
-
-            <!-- EMPLOYEE NAME -->
-
-            <div>
-
-                <label for="employee_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-
-                    Имя сотрудника
-
-                </label>
-
-                <input id="employee_name" type="text" name="employee_name"
-
-                       class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600
-
-                              bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg
-
-                              focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-
-                       placeholder="Введите имя сотрудника">
-
-            </div>
-
-        </div>
-
+        
         <!-- BLOCK 4 — УПРАВЛЕНИЕ ПОДРАЗДЕЛЕНИЯМИ (ТОЛЬКО ДЛЯ АДМИНОВ) -->
         @if(auth()->user()->isAdmin())
 
@@ -443,178 +446,6 @@
                     <p class="text-sm text-gray-500 dark:text-gray-500 mt-2">
                         Создайте первое подразделение выше
                     </p>
-                </div>
-            @endif
-
-        </div>
-
-        @endif
-
-        <!-- BLOCK 5 — УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ (ТОЛЬКО ДЛЯ АДМИНОВ) -->
-        @if(auth()->user()->isAdmin())
-
-        <div class="rounded-lg bg-white dark:bg-gray-800 shadow-xl p-8 space-y-6">
-
-            <!-- Сообщения об успехе/ошибках -->
-            @if(session('success'))
-                <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative" role="alert">
-                    <span class="block sm:inline">{{ session('success') }}</span>
-                </div>
-            @endif
-
-            @if(session('error'))
-                <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-                    <span class="block sm:inline">{{ session('error') }}</span>
-                </div>
-            @endif
-
-            @if($errors->any())
-                <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-                    <ul class="list-disc list-inside">
-                        @foreach($errors->all() as $error)
-                            <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
-                </div>
-            @endif
-
-            <div class="flex items-center justify-between">
-                <h3 class="text-lg font-medium text-gray-900 dark:text-white">
-                    Управление пользователями
-                </h3>
-            </div>
-
-            <!-- Создание нового пользователя -->
-            <div class="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-700">
-                <h4 class="text-sm font-medium text-gray-900 dark:text-white mb-4">Создать нового пользователя</h4>
-
-                <form action="{{ route('settings.users.store') }}" method="POST" class="space-y-4">
-                    @csrf
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                ФИО *
-                            </label>
-                            <input type="text" id="name" name="name" value="{{ old('name') }}"
-                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600
-                                          bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg
-                                          focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                                   placeholder="Иванов Иван Иванович" required>
-                        </div>
-
-                        <div>
-                            <label for="status" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                Статус *
-                            </label>
-                            <div class="mt-2 space-y-2">
-                                <div class="flex items-center">
-                                    <input id="status_admin" name="status" type="radio" value="admin"
-                                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                                           {{ old('status') === 'admin' ? 'checked' : '' }}>
-                                    <label for="status_admin" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">
-                                        Админ
-                                    </label>
-                                </div>
-                                <div class="flex items-center">
-                                    <input id="status_department_admin" name="status" type="radio" value="department_admin"
-                                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                                           {{ old('status') === 'department_admin' ? 'checked' : '' }}>
-                                    <label for="status_department_admin" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">
-                                        Админ подразделения
-                                    </label>
-                                </div>
-                                <div class="flex items-center">
-                                    <input id="status_regular_user" name="status" type="radio" value="regular_user"
-                                           class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                                           {{ old('status') === 'regular_user' ? 'checked' : '' }}>
-                                    <label for="status_regular_user" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">
-                                        Обычный пользователь
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="department_field" class="{{ in_array(old('status'), ['admin']) ? 'hidden' : '' }}">
-                        <label for="department_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Подразделение *
-                        </label>
-                        <select id="department_id" name="department_id"
-                                class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600
-                                       bg-white dark:bg-gray-700 text-gray-900 dark:text-white
-                                       rounded-lg focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
-                            <option value="">Выберите подразделение</option>
-                            @foreach($departments as $department)
-                                <option value="{{ $department->id }}" {{ old('department_id') == $department->id ? 'selected' : '' }}>
-                                    {{ $department->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div class="flex justify-end">
-                        <button type="submit"
-                                class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium
-                                       rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2
-                                       focus:ring-blue-500 focus:ring-opacity-50">
-                            Создать пользователя
-                        </button>
-                    </div>
-                </form>
-            </div>
-
-            <!-- Показать ссылку на xpaste с учетными данными -->
-            @if(session('user_credentials_url'))
-                <div class="border border-green-200 dark:border-green-600 rounded-lg p-4 bg-green-50 dark:bg-green-900/20">
-                    <h4 class="text-sm font-medium text-green-900 dark:text-green-100 mb-3">
-                        Пользователь "{{ session('user_name') }}" создан успешно!
-                    </h4>
-                    <div class="space-y-3 text-sm">
-                        <div>
-                            <span class="text-gray-600 dark:text-gray-400 block mb-1">Учетные данные сохранены в заметке:</span>
-                            <div class="flex items-center gap-2 mt-2">
-                                <a href="{{ session('user_credentials_url') }}" 
-                                   target="_blank"
-                                   class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium break-all underline">
-                                    {{ session('user_credentials_url') }}
-                                </a>
-                                <button type="button"
-                                        onclick="copyToClipboard('{{ session('user_credentials_url') }}', this)"
-                                        class="px-2 py-1 bg-blue-500/30 hover:bg-blue-500/50 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-md border border-blue-400/30 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
-                                    Копировать
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                        Откройте ссылку, чтобы получить логин и пароль для входа в систему
-                    </div>
-                </div>
-            @elseif(session('user_credentials'))
-                <!-- Fallback: показать данные напрямую, если не удалось создать заметку -->
-                <div class="border border-yellow-200 dark:border-yellow-600 rounded-lg p-4 bg-yellow-50 dark:bg-yellow-900/20">
-                    @if(session('warning'))
-                        <div class="text-yellow-800 dark:text-yellow-200 text-sm mb-3">{{ session('warning') }}</div>
-                    @endif
-                    <h4 class="text-sm font-medium text-yellow-900 dark:text-yellow-100 mb-3">Пользователь создан успешно!</h4>
-                    <div class="space-y-2 text-sm">
-                        <div class="flex justify-between">
-                            <span class="text-gray-600 dark:text-gray-400">Имя:</span>
-                            <span class="text-yellow-900 dark:text-yellow-100 font-medium">{{ session('user_credentials')['name'] }}</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-600 dark:text-gray-400">Email (логин):</span>
-                            <span class="text-yellow-900 dark:text-yellow-100 font-medium">{{ session('user_credentials')['email'] }}</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-600 dark:text-gray-400">Пароль:</span>
-                            <span class="text-yellow-900 dark:text-yellow-100 font-medium">{{ session('user_credentials')['password'] }}</span>
-                        </div>
-                    </div>
-                    <div class="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                        Сохраните эти данные - они нужны для входа в систему
-                    </div>
                 </div>
             @endif
 
