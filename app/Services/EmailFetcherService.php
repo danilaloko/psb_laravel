@@ -43,7 +43,7 @@ class EmailFetcherService
             $client->connect();
 
             $since = Carbon::now()->subMinutes($minutes);
-            $limit = config('imap.options.fetch', 50);
+            $limit = 100; // Устанавливаем больший лимит для поиска всех писем
 
             Log::info('Searching for emails', [
                 'since' => $since->format('Y-m-d H:i:s'),
@@ -106,7 +106,8 @@ class EmailFetcherService
             }
 
             // Получаем данные письма
-            $subject = $message->getSubject() ?: 'Без темы';
+            $subjectRaw = $message->getSubject() ?: 'Без темы';
+            $subject = $this->decodeMimeHeader($subjectRaw);
             $content = $this->getMessageContent($message);
             $from = $message->getFrom()[0] ?? null;
             $to = $message->getTo()[0] ?? null;
@@ -116,6 +117,9 @@ class EmailFetcherService
                 Log::warning("Email without sender: {$messageId}");
                 return false;
             }
+
+            // Декодируем имя отправителя
+            $fromName = $from->personal ? $this->decodeMimeHeader($from->personal) : null;
 
             // Создаем или находим thread
             $thread = Thread::firstOrCreate([
@@ -129,7 +133,7 @@ class EmailFetcherService
                 'content' => $content,
                 'thread_id' => $thread->id,
                 'from_address' => $from->mail,
-                'from_name' => $from->personal ?: null,
+                'from_name' => $fromName,
                 'received_at' => $receivedAt,
             ]);
 
@@ -143,6 +147,34 @@ class EmailFetcherService
         } catch (\Exception $e) {
             Log::error('Error processing message: ' . $e->getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Декодирование MIME заголовков (Base64, Quoted-Printable)
+     */
+    private function decodeMimeHeader(string $header): string
+    {
+        // Если заголовок уже декодирован или пустой, возвращаем как есть
+        if (empty($header) || strpos($header, '=?') === false) {
+            return $header;
+        }
+
+        try {
+            // Используем mb_decode_mimeheader для декодирования
+            $decoded = mb_decode_mimeheader($header);
+            
+            // Если декодирование не сработало, пробуем iconv
+            if ($decoded === $header && function_exists('iconv_mime_decode')) {
+                $decoded = iconv_mime_decode($header, ICONV_MIME_DECODE_CONTINUE_ON_ERROR, 'UTF-8');
+            }
+            
+            return $decoded ?: $header;
+        } catch (\Exception $e) {
+            Log::warning('Error decoding MIME header: ' . $e->getMessage(), [
+                'header' => substr($header, 0, 100)
+            ]);
+            return $header;
         }
     }
 

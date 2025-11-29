@@ -158,14 +158,14 @@
                                         <span>Поток: {{ $task->thread->title }}</span>
                                         <span>•</span>
                                     @endif
-                                    @if($isAdmin ?? false && $task->executor)
-                                        <span>Исполнитель: {{ $task->executor->name }}</span>
-                                        @if($task->executor->department)
+                                        @if($isAdmin ?? false)
+                                            <span>Исполнитель: {{ $task->executor ? $task->executor->name : 'не задан' }}</span>
+                                            @if($task->executor && $task->executor->department)
+                                                <span>•</span>
+                                                <span>Подразделение: {{ $task->executor->department->name }}</span>
+                                            @endif
                                             <span>•</span>
-                                            <span>Подразделение: {{ $task->executor->department->name }}</span>
                                         @endif
-                                        <span>•</span>
-                                    @endif
                                     @if($task->creator)
                                         <span>От: {{ $task->creator->name }}</span>
                                         <span>•</span>
@@ -235,11 +235,19 @@
             </div>
             @endif
 
+            @if($isAdmin ?? false)
+            <div class="flex items-center space-x-2">
+                <input type="checkbox" name="backlog" value="1" id="backlog" {{ request('backlog') == '1' ? 'checked' : '' }}
+                       class="rounded border-gray-300 dark:border-gray-600 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50 dark:bg-gray-700">
+                <label for="backlog" class="text-sm font-medium text-gray-700 dark:text-gray-300">Бэклог</label>
+            </div>
+            @endif
+
             <div class="flex items-end gap-2">
                 <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
                     Применить
                 </button>
-                @if(request()->hasAny(['status', 'priority', 'executor_id', 'department_id']))
+                @if(request()->hasAny(['status', 'priority', 'executor_id', 'department_id', 'backlog']))
                 <a href="{{ route('dashboard') }}" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
                     Сбросить фильтры
                 </a>
@@ -294,9 +302,9 @@
                                             <span>Поток: {{ $task->thread->title }}</span>
                                             <span>•</span>
                                         @endif
-                                        @if($isAdmin ?? false && $task->executor)
-                                            <span>Исполнитель: {{ $task->executor->name }}</span>
-                                            @if($task->executor->department)
+                                        @if($isAdmin ?? false)
+                                            <span>Исполнитель: {{ $task->executor ? $task->executor->name : 'не задан' }}</span>
+                                            @if($task->executor && $task->executor->department)
                                                 <span>•</span>
                                                 <span>Подразделение: {{ $task->executor->department->name }}</span>
                                             @endif

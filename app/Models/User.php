@@ -26,6 +26,8 @@ class User extends Authenticatable
         'role',
         'department_id',
         'department_admin',
+        'is_active',
+        'last_task_assigned_at',
     ];
 
     /**
@@ -49,6 +51,8 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'department_admin' => 'boolean',
+            'is_active' => 'boolean',
+            'last_task_assigned_at' => 'datetime',
         ];
     }
 
@@ -73,6 +77,14 @@ class User extends Authenticatable
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
+    }
+
+    /**
+     * Получить код департамента
+     */
+    public function getDepartmentCodeAttribute(): ?string
+    {
+        return $this->department?->code;
     }
 
     /**

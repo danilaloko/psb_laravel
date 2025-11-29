@@ -16,10 +16,12 @@ class Task extends Model
         'executor_id',
         'creator_id',
         'due_date',
+        'metadata',
     ];
 
     protected $casts = [
         'due_date' => 'datetime',
+        'metadata' => 'array',
     ];
 
     public function thread(): BelongsTo
@@ -30,6 +32,11 @@ class Task extends Model
     public function executor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'executor_id');
+    }
+
+    public function hasExecutor(): bool
+    {
+        return !is_null($this->executor_id);
     }
 
     public function creator(): BelongsTo

@@ -3,9 +3,13 @@
 namespace App\Jobs;
 
 use App\Models\Department;
+use App\Models\Task;
+use App\Models\Thread;
+use App\Models\User;
 use App\Models\Email;
 use App\Models\Generation;
 use App\Services\YandexAIService;
+use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -38,6 +42,15 @@ class ProcessEmailWithAI implements ShouldQueue
 
         // Перезагружаем email для корректной работы после десериализации
         $this->email = Email::find($this->email->id);
+        
+        // Убеждаемся, что email имеет thread_id (fallback если его нет)
+        if (!$this->email->thread_id) {
+            $thread = Thread::firstOrCreate([
+                'title' => $this->email->subject ?: 'Без темы'
+            ]);
+            $this->email->update(['thread_id' => $thread->id]);
+            Log::warning("Email {$this->email->id} had no thread_id, created thread {$thread->id}");
+        }
 
         try {
             // Выполняем поиск по Vector Store (если указан индекс)
@@ -45,7 +58,12 @@ class ProcessEmailWithAI implements ShouldQueue
             $searchContext = $this->formatSearchResults($searchResults);
 
             // Получаем модель из конфига
-            $modelConfig = config('ai-models')['yandex'][config('ai-models.default_model')];
+            $defaultModel = config('ai-models.default_model') ?: 'gpt-5.1-pro';
+            $modelConfig = config('ai-models')['yandex'][$defaultModel];
+
+            if (!$modelConfig) {
+                throw new \Exception("AI model configuration not found for: {$defaultModel}");
+            }
 
             // Формируем промпт с учетом результатов поиска
             $prompt = $this->buildPrompt($this->email->content, $searchContext);
@@ -68,12 +86,26 @@ class ProcessEmailWithAI implements ShouldQueue
             // Сохраняем результат с информацией о поиске
             $generation = $this->saveGeneration($parsedResponse, $processingTime, $modelConfig, $response, $searchResults);
 
+            // Создаем задачи на основе анализа
+            $createdTasks = $this->createTasksFromAnalysis($generation, $parsedResponse);
+
+            // Обновляем метаданные generation
+            $generation->update([
+                'metadata' => array_merge($generation->metadata ?? [], [
+                    'tasks_created' => true,
+                    'created_tasks_count' => count($createdTasks),
+                    'created_tasks_ids' => $createdTasks
+                ])
+            ]);
+
             Log::info("Email {$this->email->id} processed successfully", [
                 'processing_time' => $processingTime,
                 'model' => $modelConfig['name'],
                 'generation_id' => $generation->id,
                 'search_index_used' => $this->indexId,
-                'search_results_count' => $searchResults ? count($searchResults['data'] ?? []) : 0
+                'search_results_count' => $searchResults ? count($searchResults['data'] ?? []) : 0,
+                'tasks_created_count' => count($createdTasks),
+                'tasks_created_ids' => $createdTasks
             ]);
 
         } catch (Throwable $e) {
@@ -346,8 +378,53 @@ class ProcessEmailWithAI implements ShouldQueue
             ];
         }
 
-        return Generation::create([
+        // Перезагружаем email из БД перед созданием Generation для гарантии актуальных данных
+        $this->email = Email::find($this->email->id);
+        
+        // Убеждаемся, что у email есть thread_id
+        $threadId = $this->email->thread_id;
+        
+        Log::debug("Creating Generation for email {$this->email->id}", [
+            'email_thread_id' => $threadId,
+            'email_thread_id_type' => gettype($threadId),
+            'email_thread_id_empty' => empty($threadId),
+            'email_thread_id_isset' => isset($threadId)
+        ]);
+        
+        if (!$threadId) {
+            $thread = Thread::firstOrCreate([
+                'title' => $this->email->subject ?: 'Без темы'
+            ]);
+            $this->email->update(['thread_id' => $thread->id]);
+            $threadId = $thread->id;
+            Log::warning("Email {$this->email->id} had no thread_id when creating Generation, created thread {$threadId}");
+        }
+        
+        // Дополнительная проверка - если threadId все еще null, создаем thread
+        if (!$threadId) {
+            $thread = Thread::create([
+                'title' => $this->email->subject ?: 'Без темы'
+            ]);
+            $threadId = $thread->id;
+            $this->email->update(['thread_id' => $threadId]);
+            Log::error("CRITICAL: Email {$this->email->id} thread_id was null, forced thread creation {$threadId}");
+        }
+        
+        // Финальная проверка перед созданием
+        $threadId = (int) $threadId; // Явное приведение к int
+        if ($threadId <= 0) {
+            throw new \Exception("Cannot create Generation without valid thread_id for email {$this->email->id}. threadId: " . var_export($threadId, true));
+        }
+        
+        Log::debug("Creating Generation with thread_id", [
             'email_id' => $this->email->id,
+            'thread_id' => $threadId,
+            'thread_id_type' => gettype($threadId)
+        ]);
+
+        $generation = Generation::create([
+            'email_id' => $this->email->id,
+            'thread_id' => $threadId, // Всегда устанавливаем thread_id
             'type' => 'analysis',
             'prompt' => $prompt,
             'response' => $parsedResponse, // Уже распарсенный JSON
@@ -380,6 +457,21 @@ class ProcessEmailWithAI implements ShouldQueue
                 ]
             ], $searchMetadata ? ['search_metadata' => $searchMetadata] : [])
         ]);
+        
+        // Проверяем что thread_id действительно сохранился
+        $generation->refresh();
+        if (!$generation->thread_id) {
+            Log::error("CRITICAL: Generation {$generation->id} created without thread_id!", [
+                'email_id' => $this->email->id,
+                'expected_thread_id' => $threadId,
+                'generation_thread_id' => $generation->thread_id
+            ]);
+            // Принудительно обновляем
+            $generation->update(['thread_id' => $threadId]);
+            $generation->refresh();
+        }
+        
+        return $generation;
     }
 
     protected function parseYandexResponse(array $response): array
@@ -680,6 +772,430 @@ class ProcessEmailWithAI implements ShouldQueue
                 'output_per_token' => $outputRate
             ]
         ];
+    }
+
+    // === МЕТОДЫ СОЗДАНИЯ ЗАДАЧ ===
+
+    /**
+     * Получить thread_id из generation или email (fallback)
+     */
+    protected function getThreadId(Generation $generation): ?int
+    {
+        $threadId = $generation->thread_id;
+        if (!$threadId) {
+            $email = Email::find($generation->email_id);
+            $threadId = $email?->thread_id;
+            
+            // Если нашли thread_id в email, обновляем generation
+            if ($threadId) {
+                $generation->update(['thread_id' => $threadId]);
+            } else {
+                // Fallback: создаем thread если его нет ни у generation, ни у email
+                $thread = Thread::firstOrCreate([
+                    'title' => $email?->subject ?: 'Без темы'
+                ]);
+                $threadId = $thread->id;
+                
+                // Обновляем email и generation
+                if ($email) {
+                    $email->update(['thread_id' => $threadId]);
+                }
+                $generation->update(['thread_id' => $threadId]);
+                
+                Log::warning("Created thread {$threadId} for Generation {$generation->id} as fallback");
+            }
+        }
+        return $threadId;
+    }
+
+    protected function createTasksFromAnalysis(Generation $generation, array $analysis): array
+    {
+        // Проверяем условия создания задач
+        if ($this->shouldSkipTaskCreation($analysis)) {
+            $this->archiveEmail($analysis, $generation);
+            return [];
+        }
+
+        // Создаем задачи
+        $createdTaskIds = [];
+
+        // Определяем executor_id
+        $executorId = $this->findBestExecutor($analysis['department'] ?? 'general');
+
+        // Создаем основную задачу
+        $mainTask = $this->createMainTask($analysis, $executorId, $generation);
+        $createdTaskIds[] = $mainTask->id;
+
+        // Создаем дополнительные задачи
+        $followUpTasks = $this->createFollowUpTasks($analysis, $executorId, $generation);
+        $createdTaskIds = array_merge($createdTaskIds, $followUpTasks);
+
+        // Создаем задачи эскалации если нужно
+        if ($analysis['processing_requirements']['escalation_required'] ?? false) {
+            $escalationTask = $this->createEscalationTask($analysis, $generation);
+            $createdTaskIds[] = $escalationTask->id;
+        }
+
+        // Создаем задачи по рискам если нужно
+        if (($analysis['processing_requirements']['legal_risks']['risk_level'] ?? 'none') !== 'none') {
+            $riskTask = $this->createRiskTask($analysis, $generation);
+            $createdTaskIds[] = $riskTask->id;
+        }
+
+        // Создаем задачи по одобрениям
+        $approvalTasks = $this->createApprovalTasks($analysis, $generation);
+        $createdTaskIds = array_merge($createdTaskIds, $approvalTasks);
+
+        return $createdTaskIds;
+    }
+
+    protected function shouldSkipTaskCreation(array $analysis): bool
+    {
+        // Проверяем на спам
+        if (($analysis['spam_check'] ?? 0) === 1) {
+            return true;
+        }
+
+        // Проверяем необходимость действий
+        if (($analysis['action_required'] ?? false) === false) {
+            return true;
+        }
+
+        return false;
+    }
+
+    protected function findBestExecutor(string $departmentCode): ?int
+    {
+        // Ищем самого незагруженного пользователя в департаменте
+        $user = User::select('users.id')
+            ->leftJoin('departments', 'users.department_id', '=', 'departments.id')
+            ->leftJoin('tasks', function($join) {
+                $join->on('users.id', '=', 'tasks.executor_id')
+                     ->whereIn('tasks.status', ['new', 'in_progress']);
+            })
+            ->where('departments.code', $departmentCode)
+            ->where('users.is_active', true)
+            ->groupBy('users.id')
+            ->orderByRaw('COUNT(tasks.id) ASC, users.last_task_assigned_at ASC')
+            ->first();
+
+        if ($user) {
+            // Обновляем время последнего назначения
+            User::where('id', $user->id)->update([
+                'last_task_assigned_at' => now()
+            ]);
+
+            return $user->id;
+        }
+
+        return null;
+    }
+
+    protected function createMainTask(array $analysis, ?int $executorId, Generation $generation): Task
+    {
+        $dueDate = $this->parseDueDate($analysis);
+
+        return Task::create([
+            'title' => $analysis['task_title'] ?? 'Задача по обработке письма',
+            'content' => $this->buildTaskContent($analysis),
+            'status' => 'new',
+            'priority' => $this->mapPriority($analysis['task_priority'] ?? 'medium'),
+            'thread_id' => $this->getThreadId($generation),
+            'executor_id' => $executorId,
+            'creator_id' => 1, // Системный пользователь
+            'due_date' => $dueDate,
+            'metadata' => [
+                'generation_id' => $generation->id,
+                'email_id' => $generation->email_id,
+                'analysis_type' => 'main_task',
+                'department' => $analysis['department'] ?? 'general'
+            ]
+        ]);
+    }
+
+    protected function createFollowUpTasks(array $analysis, ?int $executorId, Generation $generation): array
+    {
+        $taskIds = [];
+        $followUpActions = $analysis['action_recommendations']['follow_up_actions'] ?? [];
+
+        foreach ($followUpActions as $action) {
+            $task = Task::create([
+                'title' => $action,
+                'content' => "Follow-up действие: {$action}\n\nКонтекст: " . ($analysis['summary'] ?? ''),
+                'status' => 'new',
+                'priority' => 'medium',
+                'thread_id' => $this->getThreadId($generation),
+                'executor_id' => $executorId,
+                'creator_id' => 1,
+                'due_date' => now()->addDays(3), // Через 3 дня
+                'metadata' => [
+                    'generation_id' => $generation->id,
+                    'email_id' => $generation->email_id,
+                    'analysis_type' => 'follow_up',
+                    'parent_action' => $action
+                ]
+            ]);
+
+            $taskIds[] = $task->id;
+        }
+
+        return $taskIds;
+    }
+
+    protected function createEscalationTask(array $analysis, Generation $generation): Task
+    {
+        $escalationLevel = $analysis['processing_requirements']['escalation_level'] ?? 'department_head';
+
+        // Ищем руководителя для эскалации
+        $manager = $this->findManagerForEscalation($analysis['department'] ?? 'general');
+
+        return Task::create([
+            'title' => "Эскалация: {$escalationLevel}",
+            'content' => $this->buildEscalationContent($analysis),
+            'status' => 'new',
+            'priority' => 'urgent',
+            'thread_id' => $generation->thread_id,
+            'executor_id' => $manager?->id,
+            'creator_id' => 1,
+            'due_date' => now()->addDay(), // Завтра
+            'metadata' => [
+                'generation_id' => $generation->id,
+                'email_id' => $generation->email_id,
+                'analysis_type' => 'escalation',
+                'escalation_level' => $escalationLevel
+            ]
+        ]);
+    }
+
+    protected function createRiskTask(array $analysis, Generation $generation): Task
+    {
+        $riskLevel = $analysis['processing_requirements']['legal_risks']['risk_level'];
+
+        // Ищем специалиста по рискам
+        $riskSpecialist = $this->findRiskSpecialist();
+
+        return Task::create([
+            'title' => "Анализ рисков: {$riskLevel}",
+            'content' => $this->buildRiskContent($analysis),
+            'status' => 'new',
+            'priority' => $riskLevel === 'high' ? 'urgent' : 'high',
+            'thread_id' => $generation->thread_id,
+            'executor_id' => $riskSpecialist?->id,
+            'creator_id' => 1,
+            'due_date' => now()->addDays(2),
+            'metadata' => [
+                'generation_id' => $generation->id,
+                'email_id' => $generation->email_id,
+                'analysis_type' => 'risk_analysis',
+                'risk_level' => $riskLevel
+            ]
+        ]);
+    }
+
+    protected function createApprovalTasks(array $analysis, Generation $generation): array
+    {
+        $taskIds = [];
+        $approvalDepartments = $analysis['processing_requirements']['approval_departments'] ?? [];
+
+        foreach ($approvalDepartments as $deptCode) {
+            // Ищем представителя департамента для согласования
+            $approver = $this->findDepartmentApprover($deptCode);
+
+            $task = Task::create([
+                'title' => "Согласование от " . Department::where('code', $deptCode)->value('name'),
+                'content' => "Требуется согласование от департамента: {$deptCode}\n\n" . ($analysis['summary'] ?? ''),
+                'status' => 'new',
+                'priority' => 'high',
+                'thread_id' => $this->getThreadId($generation),
+                'executor_id' => $approver?->id,
+                'creator_id' => 1,
+                'due_date' => now()->addDays(1),
+                'metadata' => [
+                    'generation_id' => $generation->id,
+                    'email_id' => $generation->email_id,
+                    'analysis_type' => 'approval',
+                    'department' => $deptCode
+                ]
+            ]);
+
+            $taskIds[] = $task->id;
+        }
+
+        return $taskIds;
+    }
+
+    protected function archiveEmail(array $analysis, Generation $generation): void
+    {
+        // Создаем архивную задачу без исполнителя
+        Task::create([
+            'title' => $analysis['task_title'] ?? 'Архивное письмо',
+            'content' => $this->buildArchivedContent($analysis),
+            'status' => 'archived',
+            'priority' => 'low',
+            'thread_id' => $generation->thread_id,
+            'executor_id' => null, // Доступно всем
+            'creator_id' => 1,
+            'due_date' => null,
+            'metadata' => [
+                'generation_id' => $generation->id,
+                'email_id' => $generation->email_id,
+                'analysis_type' => 'archived',
+                'reason' => ($analysis['spam_check'] ?? 0) === 1 ? 'spam' : 'no_action_required'
+            ]
+        ]);
+
+        Log::info("Email archived without task creation", [
+            'generation_id' => $generation->id,
+            'reason' => ($analysis['spam_check'] ?? 0) === 1 ? 'spam' : 'no_action_required'
+        ]);
+    }
+
+    protected function findManagerForEscalation(string $departmentCode): ?User
+    {
+        return User::whereHas('department', function($query) use ($departmentCode) {
+                    $query->where('code', $departmentCode);
+                })
+                ->where('is_active', true)
+                ->where('role', 'manager')
+                ->first();
+    }
+
+    protected function findRiskSpecialist(): ?User
+    {
+        return User::whereHas('department', function($query) {
+                    $query->where('code', 'legal');
+                })
+                ->where('is_active', true)
+                ->whereIn('role', ['manager', 'specialist'])
+                ->first();
+    }
+
+    protected function findDepartmentApprover(string $departmentCode): ?User
+    {
+        return User::whereHas('department', function($query) use ($departmentCode) {
+                    $query->where('code', $departmentCode);
+                })
+                ->where('is_active', true)
+                ->whereIn('role', ['manager', 'specialist'])
+                ->orderBy('last_task_assigned_at')
+                ->first();
+    }
+
+    protected function parseDueDate(array $analysis): ?Carbon
+    {
+        $deadline = $analysis['deadline'] ?? $analysis['processing_requirements']['sla_deadline'] ?? null;
+
+        if ($deadline) {
+            try {
+                return Carbon::parse($deadline);
+            } catch (\Exception $e) {
+                Log::warning("Failed to parse due date", [
+                    'deadline' => $deadline,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+
+        return null;
+    }
+
+    protected function mapPriority(string $aiPriority): string
+    {
+        $priorityMap = [
+            'urgent' => 'urgent',
+            'high' => 'high',
+            'medium' => 'medium',
+            'low' => 'low'
+        ];
+
+        return $priorityMap[$aiPriority] ?? 'medium';
+    }
+
+    protected function buildTaskContent(array $analysis): string
+    {
+        $content = [];
+
+        if (isset($analysis['summary'])) {
+            $content[] = "**Краткое содержание:**\n{$analysis['summary']}";
+        }
+
+        if (isset($analysis['core_request'])) {
+            $content[] = "**Суть запроса:**\n{$analysis['core_request']}";
+        }
+
+        if (isset($analysis['key_points']) && is_array($analysis['key_points'])) {
+            $content[] = "**Ключевые моменты:**\n" . implode("\n- ", $analysis['key_points']);
+        }
+
+        if (isset($analysis['suggested_response'])) {
+            $content[] = "**Предлагаемый ответ:**\n{$analysis['suggested_response']}";
+        }
+
+        if (isset($analysis['action_recommendations']['immediate_actions'])) {
+            $actions = $analysis['action_recommendations']['immediate_actions'];
+            if (is_array($actions)) {
+                $content[] = "**Немедленные действия:**\n" . implode("\n- ", $actions);
+            }
+        }
+
+        return implode("\n\n", $content);
+    }
+
+    protected function buildEscalationContent(array $analysis): string
+    {
+        $content = "**ЭСКЛАЦИЯ**\n\n";
+
+        if (isset($analysis['processing_requirements']['escalation_level'])) {
+            $content .= "**Уровень эскалации:** {$analysis['processing_requirements']['escalation_level']}\n\n";
+        }
+
+        if (isset($analysis['summary'])) {
+            $content .= "**Причина эскалации:**\n{$analysis['summary']}\n\n";
+        }
+
+        if (isset($analysis['processing_requirements']['legal_risks'])) {
+            $risks = $analysis['processing_requirements']['legal_risks'];
+            if (isset($risks['risk_factors']) && is_array($risks['risk_factors'])) {
+                $content .= "**Связанные риски:**\n" . implode("\n- ", $risks['risk_factors']);
+            }
+        }
+
+        return $content;
+    }
+
+    protected function buildRiskContent(array $analysis): string
+    {
+        $content = "**АНАЛИЗ РИСКОВ**\n\n";
+
+        $risks = $analysis['processing_requirements']['legal_risks'] ?? [];
+
+        if (isset($risks['risk_level'])) {
+            $content .= "**Уровень риска:** {$risks['risk_level']}\n\n";
+        }
+
+        if (isset($risks['risk_factors']) && is_array($risks['risk_factors'])) {
+            $content .= "**Факторы риска:**\n" . implode("\n- ", $risks['risk_factors']) . "\n\n";
+        }
+
+        if (isset($risks['recommended_actions']) && is_array($risks['recommended_actions'])) {
+            $content .= "**Рекомендуемые действия:**\n" . implode("\n- ", $risks['recommended_actions']);
+        }
+
+        return $content;
+    }
+
+    protected function buildArchivedContent(array $analysis): string
+    {
+        $reason = ($analysis['spam_check'] ?? 0) === 1 ? 'спам' : 'не требует действий';
+
+        $content = "**АРХИВНОЕ ПИСЬМО**\n";
+        $content .= "**Причина:** {$reason}\n\n";
+
+        if (isset($analysis['summary'])) {
+            $content .= "**Содержание:**\n{$analysis['summary']}";
+        }
+
+        return $content;
     }
 
 }

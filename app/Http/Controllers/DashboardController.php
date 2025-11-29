@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Task;
 use App\Models\Email;
+use App\Models\Generation;
 use App\Models\Department;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -78,6 +79,12 @@ class DashboardController extends Controller
             });
         }
 
+        // Фильтр бэклог (задачи без исполнителя) - только для админов
+        if ($isAdmin && $request->filled('backlog') && $request->backlog == '1') {
+            $query->whereNull('executor_id');
+            $statsQuery->whereNull('executor_id');
+        }
+
         $tasks = $query->orderBy('created_at', 'desc')->paginate(15)->withQueryString();
 
         // Топ 5 задач из выбранной выборки
@@ -96,8 +103,9 @@ class DashboardController extends Controller
         }
 
         // Применяем те же фильтры, что и для основного списка
-        $hasFilters = $request->filled('status') || $request->filled('priority') || 
-                      $request->filled('executor_id') || $request->filled('department_id');
+        $hasFilters = $request->filled('status') || $request->filled('priority') ||
+                      $request->filled('executor_id') || $request->filled('department_id') ||
+                      $request->filled('backlog');
 
         if ($request->filled('status')) {
             $topTasksQuery->where('status', $request->status);
@@ -121,6 +129,11 @@ class DashboardController extends Controller
             $topTasksQuery->whereHas('executor', function ($q) use ($request) {
                 $q->where('department_id', $request->department_id);
             });
+        }
+
+        // Фильтр бэклог для топ задач - только для админов
+        if ($isAdmin && $request->filled('backlog') && $request->backlog == '1') {
+            $topTasksQuery->whereNull('executor_id');
         }
 
         // Если фильтры не применены, показываем задачи с истекающим сроком
@@ -201,6 +214,45 @@ class DashboardController extends Controller
             // Обычный пользователь видит только свои задачи
             if ($task->executor_id !== $user->id) {
                 abort(403);
+            }
+        }
+
+        // Проверяем и исправляем thread_id если его нет
+        if (!$task->thread_id) {
+            $threadId = null;
+            
+            // Пробуем получить thread_id из generation
+            $genId = $task->metadata['generation_id'] ?? null;
+            if ($genId) {
+                $generation = \App\Models\Generation::find($genId);
+                if ($generation && $generation->thread_id) {
+                    $threadId = $generation->thread_id;
+                } elseif ($generation) {
+                    // Если у generation нет thread_id, берем из email
+                    $email = Email::find($generation->email_id);
+                    if ($email && $email->thread_id) {
+                        $threadId = $email->thread_id;
+                        // Обновляем generation
+                        $generation->update(['thread_id' => $threadId]);
+                    }
+                }
+            }
+            
+            // Если не нашли через generation, пробуем через email напрямую
+            if (!$threadId) {
+                $emailId = $task->metadata['email_id'] ?? null;
+                if ($emailId) {
+                    $email = Email::find($emailId);
+                    if ($email && $email->thread_id) {
+                        $threadId = $email->thread_id;
+                    }
+                }
+            }
+            
+            // Если нашли thread_id, обновляем задачу
+            if ($threadId) {
+                $task->update(['thread_id' => $threadId]);
+                $task->refresh();
             }
         }
 
