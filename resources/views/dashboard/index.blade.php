@@ -95,6 +95,92 @@
         </div>
     </div>
     
+    <!-- Top 5 Tasks -->
+    @if(isset($topTasks) && $topTasks->count() > 0)
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Топ 5 приоритетных задач</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Задачи с высоким приоритетом и истекающим сроком</p>
+        </div>
+        
+        <div class="divide-y divide-gray-200 dark:divide-gray-700">
+            @foreach($topTasks as $task)
+                <a href="{{ route('dashboard.task.show', $task) }}" class="block hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                    <div class="px-6 py-4">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <h3 class="text-lg font-medium text-gray-900 dark:text-white">{{ $task->title }}</h3>
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full
+                                        @if($task->priority == 'urgent') bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400
+                                        @elseif($task->priority == 'high') bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400
+                                        @elseif($task->priority == 'medium') bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400
+                                        @else bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400
+                                        @endif">
+                                        @if($task->priority == 'urgent') Срочный
+                                        @elseif($task->priority == 'high') Высокий
+                                        @elseif($task->priority == 'medium') Средний
+                                        @else Низкий
+                                        @endif
+                                    </span>
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full
+                                        @if($task->status == 'new') bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400
+                                        @elseif($task->status == 'in_progress') bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400
+                                        @elseif($task->status == 'completed') bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400
+                                        @else bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400
+                                        @endif">
+                                        @if($task->status == 'new') Новая
+                                        @elseif($task->status == 'in_progress') В работе
+                                        @elseif($task->status == 'completed') Завершено
+                                        @elseif($task->status == 'cancelled') Отменена
+                                        @else Архив
+                                        @endif
+                                    </span>
+                                    @if($task->due_date)
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full
+                                            @if($task->due_date->isPast()) bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400
+                                            @elseif($task->due_date->isToday()) bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400
+                                            @else bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400
+                                            @endif">
+                                            @if($task->due_date->isPast())
+                                                Просрочено: {{ $task->due_date->format('d.m.Y') }}
+                                            @elseif($task->due_date->isToday())
+                                                Сегодня
+                                            @else
+                                                До {{ $task->due_date->format('d.m.Y') }}
+                                            @endif
+                                        </span>
+                                    @endif
+                                </div>
+                                <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{{ Str::limit($task->content, 150) }}</p>
+                                <div class="mt-3 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                                    @if($task->thread)
+                                        <span>Поток: {{ $task->thread->title }}</span>
+                                        <span>•</span>
+                                    @endif
+                                    @if($isAdmin ?? false && $task->executor)
+                                        <span>Исполнитель: {{ $task->executor->name }}</span>
+                                        @if($task->executor->department)
+                                            <span>•</span>
+                                            <span>Подразделение: {{ $task->executor->department->name }}</span>
+                                        @endif
+                                        <span>•</span>
+                                    @endif
+                                    @if($task->creator)
+                                        <span>От: {{ $task->creator->name }}</span>
+                                        <span>•</span>
+                                    @endif
+                                    <span>{{ $task->created_at->format('d.m.Y H:i') }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            @endforeach
+        </div>
+    </div>
+    @endif
+    
     <!-- Filters -->
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
         <form method="GET" action="{{ route('dashboard') }}" class="flex flex-wrap gap-4">

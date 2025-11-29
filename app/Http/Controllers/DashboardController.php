@@ -80,6 +80,69 @@ class DashboardController extends Controller
 
         $tasks = $query->orderBy('created_at', 'desc')->paginate(15)->withQueryString();
 
+        // Топ 5 задач из выбранной выборки
+        // Создаем запрос для топ задач на основе тех же фильтров
+        $topTasksQuery = Task::with(['thread', 'creator', 'executor.department']);
+
+        // Применяем те же ограничения доступа
+        if ($isAdmin) {
+            // Полный админ видит все задачи
+        } elseif ($isDepartmentAdmin) {
+            $topTasksQuery->whereHas('executor', function ($q) use ($user) {
+                $q->where('department_id', $user->department_id);
+            });
+        } else {
+            $topTasksQuery->where('executor_id', $user->id);
+        }
+
+        // Применяем те же фильтры, что и для основного списка
+        $hasFilters = $request->filled('status') || $request->filled('priority') || 
+                      $request->filled('executor_id') || $request->filled('department_id');
+
+        if ($request->filled('status')) {
+            $topTasksQuery->where('status', $request->status);
+        } else {
+            // Исключаем завершенные и отмененные задачи для топ списка, если нет фильтра по статусу
+            $topTasksQuery->whereNotIn('status', ['completed', 'cancelled']);
+        }
+
+        if ($request->filled('priority')) {
+            $topTasksQuery->where('priority', $request->priority);
+        } else {
+            // По умолчанию показываем только высокий и срочный приоритет
+            $topTasksQuery->whereIn('priority', ['high', 'urgent']);
+        }
+
+        if (($isAdmin || $isDepartmentAdmin) && $request->filled('executor_id')) {
+            $topTasksQuery->where('executor_id', $request->executor_id);
+        }
+
+        if ($request->filled('department_id')) {
+            $topTasksQuery->whereHas('executor', function ($q) use ($request) {
+                $q->where('department_id', $request->department_id);
+            });
+        }
+
+        // Если фильтры не применены, показываем задачи с истекающим сроком
+        // (due_date не null и срок в ближайшие 7 дней или уже прошел)
+        if (!$hasFilters) {
+            $topTasksQuery->whereNotNull('due_date')
+                ->where('due_date', '<=', now()->addDays(7));
+        }
+
+        // Сортируем: сначала по сроку выполнения (если есть), затем по приоритету, затем по дате создания
+        $topTasks = $topTasksQuery->orderByRaw('CASE WHEN due_date IS NOT NULL THEN 0 ELSE 1 END')
+            ->orderBy('due_date', 'asc')
+            ->orderByRaw("CASE 
+                WHEN priority = 'urgent' THEN 1 
+                WHEN priority = 'high' THEN 2 
+                WHEN priority = 'medium' THEN 3 
+                ELSE 4 
+            END")
+            ->orderBy('created_at', 'desc')
+            ->limit(5)
+            ->get();
+
         // Статистика на основе отфильтрованных данных
         $stats = [
             'total' => (clone $statsQuery)->count(),
@@ -116,7 +179,7 @@ class DashboardController extends Controller
                 : collect();
         }
 
-        return view('dashboard.index', compact('tasks', 'stats', 'executors', 'departments', 'isAdmin'));
+        return view('dashboard.index', compact('tasks', 'stats', 'executors', 'departments', 'isAdmin', 'topTasks'));
     }
 
     public function show(Task $task)
