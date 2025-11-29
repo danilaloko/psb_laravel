@@ -1,0 +1,79 @@
+erDiagram
+    USERS ||--o{ TASKS : "creates/executes"
+    USERS ||--o{ DEPARTMENTS : "belongs_to"
+    THREADS ||--o{ EMAILS : "contains"
+    THREADS ||--o{ TASKS : "has"
+    THREADS ||--o{ GENERATIONS : "has"
+    EMAILS ||--o{ GENERATIONS : "analyzed_by"
+    
+    USERS {
+        int id PK
+        string name
+        string email
+        string password
+        boolean is_admin
+        int department_id FK
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    DEPARTMENTS {
+        int id PK
+        string name
+        string description
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    THREADS {
+        int id PK
+        string title
+        string status
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    EMAILS {
+        int id PK
+        string message_id
+        string subject
+        text content
+        int thread_id FK
+        string from_address
+        string from_name
+        timestamp received_at
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    TASKS {
+        int id PK
+        string title
+        text content
+        string status
+        string priority
+        int thread_id FK
+        int executor_id FK
+        int creator_id FK
+        date due_date
+        json metadata
+        timestamp created_at
+        timestamp updated_at
+    }
+    
+    GENERATIONS {
+        int id PK
+        int email_id FK
+        int thread_id FK
+        string type
+        text prompt
+        json response
+        decimal processing_time
+        string status
+        text error_message
+        json metadata
+        boolean is_spam
+        timestamp created_at
+        timestamp updated_at
+    }
+

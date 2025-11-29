@@ -1,0 +1,133 @@
+graph TB
+    subgraph "Frontend Layer"
+        WEB[Web Browser]
+        API[API Clients]
+    end
+
+    subgraph "HTTP Layer - Controllers"
+        AUTH[LoginController<br/>Authentication]
+        DASH[DashboardController<br/>User Dashboard]
+        ADMIN[AdminDashboardController<br/>Admin Panel]
+        EMAIL_CTRL[EmailController<br/>Email Management]
+        TASK_CTRL[TaskController<br/>Task Management]
+        AI_CTRL[AIAnalysisController<br/>AI Analysis]
+        SETTINGS[SettingsController<br/>Settings]
+        XPASTE[XpasteController<br/>Xpaste Integration]
+    end
+
+    subgraph "Queue Layer - Jobs"
+        PROCESS_EMAIL[ProcessEmailWithAI<br/>Email Analysis Job]
+        GENERATE_REPLY[GenerateThreadReply<br/>Reply Generation Job]
+        CREATE_TASKS[CreateTasksFromAnalysis<br/>Task Creation Job]
+    end
+
+    subgraph "Service Layer"
+        YANDEX_AI[YandexAIService<br/>AI Integration]
+        EMAIL_FETCHER[EmailFetcherService<br/>IMAP Email Fetching]
+        XPASTE_SVC[XpasteService<br/>Xpaste Integration]
+    end
+
+    subgraph "Data Layer - Models"
+        USER_MODEL[User Model]
+        EMAIL_MODEL[Email Model]
+        THREAD_MODEL[Thread Model]
+        TASK_MODEL[Task Model]
+        GENERATION_MODEL[Generation Model]
+        DEPT_MODEL[Department Model]
+    end
+
+    subgraph "External Services"
+        YANDEX_API[Yandex AI API<br/>LLM Processing]
+        IMAP_SERVER[IMAP Server<br/>Email Fetching]
+        VECTOR_STORE[Yandex Vector Store<br/>Search Indexes]
+    end
+
+    subgraph "Database"
+        DB[(MySQL/PostgreSQL<br/>Laravel Database)]
+    end
+
+    %% Frontend to Controllers
+    WEB -->|HTTP Requests| AUTH
+    WEB -->|HTTP Requests| DASH
+    WEB -->|HTTP Requests| ADMIN
+    WEB -->|HTTP Requests| EMAIL_CTRL
+    WEB -->|HTTP Requests| TASK_CTRL
+    WEB -->|HTTP Requests| AI_CTRL
+    WEB -->|HTTP Requests| SETTINGS
+    API -->|API Requests| EMAIL_CTRL
+    API -->|API Requests| TASK_CTRL
+
+    %% Controllers to Jobs
+    EMAIL_CTRL -->|dispatch| PROCESS_EMAIL
+    TASK_CTRL -->|dispatch| PROCESS_EMAIL
+    TASK_CTRL -->|dispatch| GENERATE_REPLY
+    AI_CTRL -->|dispatch| PROCESS_EMAIL
+
+    %% Jobs to Services
+    PROCESS_EMAIL -->|uses| YANDEX_AI
+    PROCESS_EMAIL -->|uses| VECTOR_STORE
+    GENERATE_REPLY -->|uses| YANDEX_AI
+    GENERATE_REPLY -->|uses| VECTOR_STORE
+    PROCESS_EMAIL -->|dispatch| CREATE_TASKS
+
+    %% Services to External APIs
+    YANDEX_AI -->|API Calls| YANDEX_API
+    YANDEX_AI -->|Search Queries| VECTOR_STORE
+    EMAIL_FETCHER -->|IMAP Protocol| IMAP_SERVER
+    EMAIL_FETCHER -->|dispatch| PROCESS_EMAIL
+
+    %% Controllers to Services
+    EMAIL_CTRL -->|uses| EMAIL_FETCHER
+    TASK_CTRL -->|uses| YANDEX_AI
+    AI_CTRL -->|uses| YANDEX_AI
+    XPASTE -->|uses| XPASTE_SVC
+
+    %% Controllers to Models
+    AUTH -->|queries| USER_MODEL
+    DASH -->|queries| TASK_MODEL
+    DASH -->|queries| EMAIL_MODEL
+    ADMIN -->|queries| EMAIL_MODEL
+    ADMIN -->|queries| GENERATION_MODEL
+    EMAIL_CTRL -->|creates/updates| EMAIL_MODEL
+    EMAIL_CTRL -->|creates/updates| THREAD_MODEL
+    TASK_CTRL -->|creates/updates| TASK_MODEL
+    TASK_CTRL -->|queries| THREAD_MODEL
+    TASK_CTRL -->|queries| GENERATION_MODEL
+    AI_CTRL -->|queries| GENERATION_MODEL
+    SETTINGS -->|manages| USER_MODEL
+    SETTINGS -->|manages| DEPT_MODEL
+
+    %% Jobs to Models
+    PROCESS_EMAIL -->|reads/updates| EMAIL_MODEL
+    PROCESS_EMAIL -->|creates| GENERATION_MODEL
+    PROCESS_EMAIL -->|reads| THREAD_MODEL
+    GENERATE_REPLY -->|reads| THREAD_MODEL
+    GENERATE_REPLY -->|creates| GENERATION_MODEL
+    CREATE_TASKS -->|creates| TASK_MODEL
+    CREATE_TASKS -->|reads| GENERATION_MODEL
+
+    %% Models to Database
+    USER_MODEL -->|ORM| DB
+    EMAIL_MODEL -->|ORM| DB
+    THREAD_MODEL -->|ORM| DB
+    TASK_MODEL -->|ORM| DB
+    GENERATION_MODEL -->|ORM| DB
+    DEPT_MODEL -->|ORM| DB
+
+    %% Styling
+    classDef frontend fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    classDef controller fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef job fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef service fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    classDef model fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    classDef external fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    classDef database fill:#e0f2f1,stroke:#004d40,stroke-width:3px
+
+    class WEB,API frontend
+    class AUTH,DASH,ADMIN,EMAIL_CTRL,TASK_CTRL,AI_CTRL,SETTINGS,XPASTE controller
+    class PROCESS_EMAIL,GENERATE_REPLY,CREATE_TASKS job
+    class YANDEX_AI,EMAIL_FETCHER,XPASTE_SVC service
+    class USER_MODEL,EMAIL_MODEL,THREAD_MODEL,TASK_MODEL,GENERATION_MODEL,DEPT_MODEL model
+    class YANDEX_API,IMAP_SERVER,VECTOR_STORE external
+    class DB database
+

@@ -1,0 +1,62 @@
+sequenceDiagram
+    participant User as Пользователь/Admin
+    participant Controller as EmailController/TaskController
+    participant Queue as Queue System
+    participant Job as ProcessEmailWithAI Job
+    participant VectorStore as Yandex Vector Store
+    participant AIService as YandexAIService
+    participant YandexAPI as Yandex AI API
+    participant DB as Database
+    participant TaskJob as CreateTasksFromAnalysis Job
+
+    Note over User,DB: Процесс обработки входящего email
+
+    User->>Controller: POST /admin/emails или создание задачи
+    Controller->>DB: Создать Email и Thread
+    DB-->>Controller: Email создан
+    
+    Controller->>Queue: Dispatch ProcessEmailWithAI(email)
+    Controller-->>User: Email создан, обработка запущена
+    
+    Queue->>Job: Выполнить ProcessEmailWithAI
+    
+    Note over Job: Этап 1: Поиск в Vector Store
+    alt Если указан search_index
+        Job->>VectorStore: Поиск релевантных документов
+        VectorStore-->>Job: Результаты поиска
+        Job->>Job: Форматирование контекста поиска
+    end
+    
+    Note over Job: Этап 2: Формирование промпта
+    Job->>Job: Построить промпт с контекстом
+    
+    Note over Job: Этап 3: Запрос к AI
+    Job->>AIService: generateCompletion(prompt, modelConfig)
+    AIService->>YandexAPI: POST /foundationModels/v1/completion
+    YandexAPI-->>AIService: AI Response
+    AIService-->>Job: Parsed Response
+    
+    Note over Job: Этап 4: Обработка ответа
+    alt Если спам
+        Job->>Job: Создать упрощенный ответ
+    end
+    
+    Job->>DB: Сохранить Generation с результатами
+    DB-->>Job: Generation сохранен
+    
+    Note over Job: Этап 5: Создание задач
+    Job->>Queue: Dispatch CreateTasksFromAnalysis
+    Queue->>TaskJob: Выполнить CreateTasksFromAnalysis
+    TaskJob->>DB: Создать Task на основе анализа
+    DB-->>TaskJob: Task создан
+    TaskJob->>DB: Обновить метаданные Generation
+    TaskJob-->>Queue: Завершено
+    
+    Job-->>Queue: Завершено
+    
+    Note over User,DB: Пользователь проверяет статус
+    User->>Controller: GET /dashboard/task/{task}/analysis-status
+    Controller->>DB: Запрос последней Generation
+    DB-->>Controller: Generation данные
+    Controller-->>User: Статус и результаты анализа
+
