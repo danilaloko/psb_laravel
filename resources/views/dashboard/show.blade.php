@@ -565,17 +565,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 'it': 'IT отдел',
                 'compliance': 'Соответствие требованиям',
                 'operations': 'Операционный отдел',
+                'management': 'Руководство',
                 
                 // Факторы риска
                 'data_privacy': 'Конфиденциальность данных',
                 'regulatory_compliance': 'Соответствие регуляторным требованиям',
                 'contract_breach': 'Нарушение договора',
                 'financial_risk': 'Финансовый риск',
+                'financial_impact': 'Финансовое воздействие',
                 'reputation_risk': 'Риск репутации',
                 
                 // Рекомендуемые действия
                 'legal_review': 'Юридическая проверка',
                 'documentation_required': 'Требуется документация',
+                'management_approval': 'Согласование руководством',
                 'escalation': 'Эскалация',
                 'consultation': 'Консультация',
                 'approval': 'Согласование',
@@ -591,6 +594,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 'contract': 'Договор',
                 'invoice': 'Счет',
                 'report': 'Отчет',
+                'reports': 'Отчеты',
                 'certificate': 'Сертификат',
                 'license': 'Лицензия',
                 'permit': 'Разрешение',
