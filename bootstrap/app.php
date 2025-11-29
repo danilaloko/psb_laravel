@@ -11,7 +11,14 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->alias([
+            'admin' => function ($request, $next) {
+                if (!$request->user() || !$request->user()->isAdmin()) {
+                    abort(403, 'Недостаточно прав доступа');
+                }
+                return $next($request);
+            },
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

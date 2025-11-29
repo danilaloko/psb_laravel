@@ -42,14 +42,17 @@ Route::middleware('auth')->group(function () {
         return view('company.create');
     })->name('company.create');
 
-    // Настройки пользователя
-    Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
+    // Настройки пользователя (только для админов)
+    Route::get('/settings', [SettingsController::class, 'index'])->middleware(['auth', 'admin'])->name('settings');
 
     // Управление подразделениями (только для админов)
     Route::middleware(['auth'])->prefix('settings')->name('settings.')->group(function () {
         Route::post('/departments', [SettingsController::class, 'storeDepartment'])->name('departments.store');
         Route::put('/departments/{department}', [SettingsController::class, 'updateDepartment'])->name('departments.update');
         Route::delete('/departments/{department}', [SettingsController::class, 'destroyDepartment'])->name('departments.destroy');
+
+        // Управление пользователями
+        Route::post('/users', [SettingsController::class, 'storeUser'])->name('users.store');
     });
 });
 
