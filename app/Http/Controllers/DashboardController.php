@@ -193,6 +193,34 @@ class DashboardController extends Controller
                 : collect();
         }
 
+        // Преобразуем markdown контент задач в HTML для краткого отображения
+        $converter = new CommonMarkConverter([
+            'html_input' => 'allow',
+            'allow_unsafe_links' => false,
+        ]);
+
+        // Обрабатываем задачи из основного списка
+        foreach ($tasks as $task) {
+            if (!empty($task->content)) {
+                // Обрезаем markdown до 150 символов перед конвертацией
+                $limitedContent = \Str::limit($task->content, 150);
+                $task->content_html = $converter->convert($limitedContent)->getContent();
+            } else {
+                $task->content_html = '';
+            }
+        }
+
+        // Обрабатываем топ задачи
+        foreach ($topTasks as $task) {
+            if (!empty($task->content)) {
+                // Обрезаем markdown до 150 символов перед конвертацией
+                $limitedContent = \Str::limit($task->content, 150);
+                $task->content_html = $converter->convert($limitedContent)->getContent();
+            } else {
+                $task->content_html = '';
+            }
+        }
+
         return view('dashboard.index', compact('tasks', 'stats', 'executors', 'departments', 'isAdmin', 'topTasks'));
     }
 

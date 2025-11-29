@@ -152,7 +152,13 @@
                                         </span>
                                     @endif
                                 </div>
-                                <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{{ Str::limit($task->content, 150) }}</p>
+                                @if(!empty($task->content_html))
+                                    <div class="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 prose prose-sm max-w-none dark:prose-invert prose-headings:my-1 prose-p:my-1 prose-ul:my-1 prose-ol:my-1">
+                                        {!! $task->content_html !!}
+                                    </div>
+                                @else
+                                    <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{{ Str::limit($task->content, 150) }}</p>
+                                @endif
                                 <div class="mt-3 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
                                     @if($task->thread)
                                         <span>Поток: {{ $task->thread->title }}</span>
@@ -296,7 +302,13 @@
                                             @endif
                                         </span>
                                     </div>
-                                    <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{{ Str::limit($task->content, 150) }}</p>
+                                    @if(!empty($task->content_html))
+                                        <div class="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 prose prose-sm max-w-none dark:prose-invert prose-headings:my-1 prose-p:my-1 prose-ul:my-1 prose-ol:my-1">
+                                            {!! $task->content_html !!}
+                                        </div>
+                                    @else
+                                        <p class="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{{ Str::limit($task->content, 150) }}</p>
+                                    @endif
                                     <div class="mt-3 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
                                         @if($task->thread)
                                             <span>Поток: {{ $task->thread->title }}</span>
