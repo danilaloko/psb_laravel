@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Department;
 use App\Models\User;
+use App\Services\XpasteService;
 use App\Services\YandexAIService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -161,13 +162,46 @@ class SettingsController extends Controller
 
         User::create($userData);
 
-        return redirect()->route('settings')
-            ->with('success', 'Пользователь успешно создан')
-            ->with('user_credentials', [
-                'email' => $generatedEmail,
-                'password' => $generatedPassword,
-                'name' => $request->name
+        // Создаем заметку в xpaste с учетными данными
+        try {
+            $xpasteService = app(XpasteService::class);
+            
+            // Формируем текст заметки с учетными данными
+            $pasteBody = "Учетные данные пользователя\n\n";
+            $pasteBody .= "Имя: {$request->name}\n";
+            $pasteBody .= "Email (логин): {$generatedEmail}\n";
+            $pasteBody .= "Пароль: {$generatedPassword}\n\n";
+            $pasteBody .= "Сохраните эти данные - они нужны для входа в систему.";
+            
+            // Создаем заметку в xpaste (auto_destroy=false, чтобы заметка не удалялась)
+            $xpasteUrl = $xpasteService->createPaste(
+                body: $pasteBody,
+                language: 'text',
+                autoDestroy: false,
+                ttlDays: 365
+            );
+            
+            return redirect()->route('settings')
+                ->with('success', 'Пользователь успешно создан')
+                ->with('user_credentials_url', $xpasteUrl)
+                ->with('user_name', $request->name);
+                
+        } catch (\Exception $e) {
+            Log::error('Failed to create xpaste note for user credentials', [
+                'error' => $e->getMessage(),
+                'user_email' => $generatedEmail,
             ]);
+            
+            // В случае ошибки создания заметки, возвращаем данные напрямую
+            return redirect()->route('settings')
+                ->with('success', 'Пользователь успешно создан')
+                ->with('warning', 'Не удалось создать заметку в xpaste. Учетные данные:')
+                ->with('user_credentials', [
+                    'email' => $generatedEmail,
+                    'password' => $generatedPassword,
+                    'name' => $request->name
+                ]);
+        }
     }
 
     private function generateUniqueEmail(): string

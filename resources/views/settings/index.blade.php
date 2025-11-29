@@ -564,22 +564,52 @@
                 </form>
             </div>
 
-            <!-- Показать сгенерированные учетные данные -->
-            @if(session('user_credentials'))
+            <!-- Показать ссылку на xpaste с учетными данными -->
+            @if(session('user_credentials_url'))
                 <div class="border border-green-200 dark:border-green-600 rounded-lg p-4 bg-green-50 dark:bg-green-900/20">
-                    <h4 class="text-sm font-medium text-green-900 dark:text-green-100 mb-3">Пользователь создан успешно!</h4>
+                    <h4 class="text-sm font-medium text-green-900 dark:text-green-100 mb-3">
+                        Пользователь "{{ session('user_name') }}" создан успешно!
+                    </h4>
+                    <div class="space-y-3 text-sm">
+                        <div>
+                            <span class="text-gray-600 dark:text-gray-400 block mb-1">Учетные данные сохранены в заметке:</span>
+                            <div class="flex items-center gap-2 mt-2">
+                                <a href="{{ session('user_credentials_url') }}" 
+                                   target="_blank"
+                                   class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium break-all underline">
+                                    {{ session('user_credentials_url') }}
+                                </a>
+                                <button type="button"
+                                        onclick="copyToClipboard('{{ session('user_credentials_url') }}', this)"
+                                        class="px-2 py-1 bg-blue-500/30 hover:bg-blue-500/50 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-md border border-blue-400/30 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50">
+                                    Копировать
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                        Откройте ссылку, чтобы получить логин и пароль для входа в систему
+                    </div>
+                </div>
+            @elseif(session('user_credentials'))
+                <!-- Fallback: показать данные напрямую, если не удалось создать заметку -->
+                <div class="border border-yellow-200 dark:border-yellow-600 rounded-lg p-4 bg-yellow-50 dark:bg-yellow-900/20">
+                    @if(session('warning'))
+                        <div class="text-yellow-800 dark:text-yellow-200 text-sm mb-3">{{ session('warning') }}</div>
+                    @endif
+                    <h4 class="text-sm font-medium text-yellow-900 dark:text-yellow-100 mb-3">Пользователь создан успешно!</h4>
                     <div class="space-y-2 text-sm">
                         <div class="flex justify-between">
                             <span class="text-gray-600 dark:text-gray-400">Имя:</span>
-                            <span class="text-green-900 dark:text-green-100 font-medium">{{ session('user_credentials')['name'] }}</span>
+                            <span class="text-yellow-900 dark:text-yellow-100 font-medium">{{ session('user_credentials')['name'] }}</span>
                         </div>
                         <div class="flex justify-between">
                             <span class="text-gray-600 dark:text-gray-400">Email (логин):</span>
-                            <span class="text-green-900 dark:text-green-100 font-medium">{{ session('user_credentials')['email'] }}</span>
+                            <span class="text-yellow-900 dark:text-yellow-100 font-medium">{{ session('user_credentials')['email'] }}</span>
                         </div>
                         <div class="flex justify-between">
                             <span class="text-gray-600 dark:text-gray-400">Пароль:</span>
-                            <span class="text-green-900 dark:text-green-100 font-medium">{{ session('user_credentials')['password'] }}</span>
+                            <span class="text-yellow-900 dark:text-yellow-100 font-medium">{{ session('user_credentials')['password'] }}</span>
                         </div>
                     </div>
                     <div class="mt-3 text-xs text-gray-500 dark:text-gray-400">
@@ -601,6 +631,21 @@
 <script>
 
 const realPassword = "mySecretPassword123";
+
+function copyToClipboard(text, button) {
+    navigator.clipboard.writeText(text).then(() => {
+        const originalText = button.textContent;
+        button.textContent = 'Скопировано!';
+        button.classList.add('bg-green-500/50', 'text-green-700', 'dark:text-green-300');
+        setTimeout(() => {
+            button.textContent = originalText;
+            button.classList.remove('bg-green-500/50', 'text-green-700', 'dark:text-green-300');
+        }, 2000);
+    }).catch(err => {
+        console.error('Ошибка копирования:', err);
+        alert('Не удалось скопировать в буфер обмена');
+    });
+}
 
 function copyPassword() {
 
