@@ -50,4 +50,8 @@ return [
         'fetch_period_minutes' => env('MAIL_FETCH_PERIOD_MINUTES', 60),
     ],
 
+    'xpaste' => [
+        'base_url' => env('XPASTE_BASE_URL', 'https://xpaste.pro'),
+    ],
+
 ];

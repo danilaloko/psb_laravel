@@ -7,6 +7,7 @@ use App\Http\Controllers\EmailController;
 use App\Http\Controllers\AIAnalysisController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\XpasteController;
 use Illuminate\Support\Facades\Route;
 
 // Главная страница - редирект на логин
@@ -36,6 +37,9 @@ Route::middleware('auth')->group(function () {
     // Задачи
     Route::get('/tasks/create', [TaskController::class, 'create'])->name('tasks.create');
     Route::post('/tasks', [TaskController::class, 'store'])->name('tasks.store');
+
+    // Xpaste
+    Route::post('/xpaste/create', [XpasteController::class, 'create'])->name('xpaste.create');
 
     // Создание компании
     Route::get('/company/create', function () {
