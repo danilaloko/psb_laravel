@@ -43,9 +43,17 @@
         
         <div class="px-6 py-6" style="word-break: break-word; overflow-wrap: break-word;">
             <!-- Content -->
-            <div class="prose dark:prose-invert max-w-none">
-                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">Содержание:</h3>
-                <div class="text-gray-700 dark:text-gray-300 break-words" style="word-break: break-word; overflow-wrap: break-word; white-space: pre-wrap; word-wrap: break-word;">{{ $email->content }}</div>
+            <div class="bg-white rounded-lg p-4 border border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900 mb-3">Содержание:</h3>
+                @if(!empty($emailContentHtml))
+                    <div class="prose max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-strong:text-gray-900 prose-ul:text-gray-700 prose-ol:text-gray-700 prose-li:text-gray-700 prose-code:text-gray-900 prose-pre:bg-gray-100 prose-blockquote:text-gray-700 break-words">
+                        {!! $emailContentHtml !!}
+                    </div>
+                @else
+                    <div class="text-gray-700 break-words" style="word-break: break-word; overflow-wrap: break-word; white-space: pre-wrap;">
+                        {{ $email->content }}
+                    </div>
+                @endif
             </div>
 
             <!-- AI Analysis Section -->
@@ -227,9 +235,78 @@ document.addEventListener('DOMContentLoaded', function() {
             return `<span class="${colors[level] || colors.none}">${labels[level] || labels.none}</span>`;
         }
 
+        function translateParameter(param) {
+            const translations = {
+                // Отделы/департаменты
+                'support': 'Поддержка',
+                'security': 'Безопасность',
+                'legal': 'Юридический отдел',
+                'finance': 'Финансовый отдел',
+                'hr': 'Отдел кадров',
+                'it': 'IT отдел',
+                'compliance': 'Соответствие требованиям',
+                'operations': 'Операционный отдел',
+                
+                // Факторы риска
+                'data_privacy': 'Конфиденциальность данных',
+                'regulatory_compliance': 'Соответствие регуляторным требованиям',
+                'contract_breach': 'Нарушение договора',
+                'financial_risk': 'Финансовый риск',
+                'reputation_risk': 'Риск репутации',
+                
+                // Рекомендуемые действия
+                'legal_review': 'Юридическая проверка',
+                'documentation_required': 'Требуется документация',
+                'escalation': 'Эскалация',
+                'consultation': 'Консультация',
+                'approval': 'Согласование',
+                'investigation': 'Расследование',
+                
+                // Уровни срочности
+                'urgent': 'Срочно',
+                'high': 'Высокий',
+                'medium': 'Средний',
+                'low': 'Низкий',
+                
+                // Типы документов
+                'contract': 'Договор',
+                'invoice': 'Счет',
+                'report': 'Отчет',
+                'certificate': 'Сертификат',
+                'license': 'Лицензия',
+                'permit': 'Разрешение',
+                
+                // Форматы
+                'pdf': 'PDF',
+                'doc': 'DOC',
+                'docx': 'DOCX',
+                'xls': 'XLS',
+                'xlsx': 'XLSX',
+                'jpg': 'JPG',
+                'png': 'PNG'
+            };
+            
+            // Проверяем точное совпадение
+            if (translations[param]) {
+                return translations[param];
+            }
+            
+            // Проверяем совпадение без учета регистра
+            const lowerParam = param.toLowerCase();
+            if (translations[lowerParam]) {
+                return translations[lowerParam];
+            }
+            
+            // Если не найдено, возвращаем оригинал
+            return param;
+        }
+
         function formatList(items, defaultText = 'Не указаны') {
             if (!items || !Array.isArray(items) || items.length === 0) return defaultText;
-            return items.map(item => `<span class="inline-block bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 text-xs rounded mr-1 mb-1">${item}</span>`).join('');
+            return items.map(item => {
+                const translated = translateParameter(item);
+                return `<span class="inline-block bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 text-xs rounded mr-1 mb-1">${translated}</span>`;
+            }).join('');
         }
 
         function formatDate(dateString) {
@@ -520,7 +597,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         ${data.metadata_analysis.document_requests.urgency_level && data.metadata_analysis.document_requests.urgency_level !== 'none' ? `
                         <div>
                             <strong class="text-gray-900 dark:text-white">Срочность:</strong>
-                            <span class="ml-2 text-gray-700 dark:text-gray-300">${data.metadata_analysis.document_requests.urgency_level}</span>
+                            <span class="ml-2 text-gray-700 dark:text-gray-300">${translateParameter(data.metadata_analysis.document_requests.urgency_level)}</span>
                         </div>
                         ` : ''}
                         ${data.metadata_analysis.document_requests.format_requirements && data.metadata_analysis.document_requests.format_requirements.length > 0 ? `

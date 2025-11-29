@@ -8,6 +8,7 @@ use App\Models\Generation;
 use App\Models\Department;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use League\CommonMark\CommonMarkConverter;
 
 class DashboardController extends Controller
 {
@@ -258,7 +259,18 @@ class DashboardController extends Controller
 
         $task->load(['thread', 'creator', 'thread.emails']);
 
-        return view('dashboard.show', compact('task'));
+        // Преобразуем markdown контент задачи в HTML
+        $converter = new CommonMarkConverter([
+            'html_input' => 'allow',
+            'allow_unsafe_links' => false,
+        ]);
+        
+        // Если контент пустой, используем пустую строку
+        $taskContentHtml = !empty($task->content) 
+            ? $converter->convert($task->content)->getContent()
+            : '';
+
+        return view('dashboard.show', compact('task', 'taskContentHtml'));
     }
 
     public function updateStatus(Request $request, Task $task)
@@ -322,6 +334,17 @@ class DashboardController extends Controller
 
         $email->load(['thread']);
 
-        return view('dashboard.email', compact('email'));
+        // Преобразуем markdown контент письма в HTML
+        $converter = new CommonMarkConverter([
+            'html_input' => 'allow',
+            'allow_unsafe_links' => false,
+        ]);
+        
+        // Если контент пустой, используем пустую строку
+        $emailContentHtml = !empty($email->content) 
+            ? $converter->convert($email->content)->getContent()
+            : '';
+
+        return view('dashboard.email', compact('email', 'emailContentHtml'));
     }
 }

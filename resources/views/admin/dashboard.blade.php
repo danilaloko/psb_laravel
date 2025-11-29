@@ -311,7 +311,7 @@
                             <div class="flex-1">
                                 <p class="text-sm font-medium text-gray-900 dark:text-white">{{ Str::limit($task->title, 40) }}</p>
                                 <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                    {{ $task->executor->name }} • {{ $task->created_at->diffForHumans() }}
+                                    {{ $task->executor->name ?? 'нет' }} • {{ $task->created_at->diffForHumans() }}
                                 </p>
                             </div>
                             <span class="px-2 py-1 text-xs font-medium rounded-full
