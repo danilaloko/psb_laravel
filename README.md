@@ -1,59 +1,430 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Система обработки писем с использованием AI
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Система автоматической обработки корпоративной электронной почты с интеллектуальным анализом на основе Yandex GPT и автоматическим созданием задач.
 
-## About Laravel
+## 📋 Описание проекта
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+Веб-приложение на базе Laravel 12, предназначенное для автоматизации обработки входящей корпоративной переписки банка. Система использует искусственный интеллект (Yandex GPT) для анализа писем, определения их типа, приоритета, классификации и автоматического создания задач для сотрудников.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+### Основные возможности
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- 🤖 **AI-анализ писем** — автоматический анализ входящих писем с использованием Yandex GPT
+- 📧 **Обработка email** — получение писем через IMAP и их структурированное хранение
+- 🎯 **Автоматическое создание задач** — генерация задач на основе результатов анализа
+- 💬 **Генерация ответов** — автоматическое создание ответов на письма с учетом контекста переписки
+- 🔍 **Векторный поиск** — использование Yandex Vector Store для контекстно-зависимого анализа
+- 🛡️ **Фильтрация спама** — автоматическое определение спама и нерелевантных писем
+- 👥 **Управление пользователями** — система ролей (администратор/пользователь) и департаментов
+- 📊 **Дашборды** — отдельные панели для пользователей и администраторов
 
-## Learning Laravel
+## 🏗️ Архитектура
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+Проект построен по многослойной архитектуре:
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+```
+Frontend Layer (Blade Templates + Tailwind CSS)
+    ↓
+HTTP Layer (Controllers)
+    ↓
+Queue Layer (Jobs)
+    ↓
+Service Layer (Services)
+    ↓
+Data Layer (Models)
+    ↓
+Database (MySQL/PostgreSQL/SQLite)
+```
 
-## Laravel Sponsors
+### Основные компоненты
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+- **Controllers**: Обработка HTTP-запросов и маршрутизация
+- **Jobs**: Асинхронная обработка задач (анализ писем, генерация ответов)
+- **Services**: Бизнес-логика и интеграции с внешними сервисами
+- **Models**: Работа с базой данных через Eloquent ORM
 
-### Premium Partners
+Подробная архитектурная диаграмма доступна в файле `architecture.mmd`.
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+## 📦 Технологический стек
 
-## Contributing
+### Backend
+- **PHP** 8.2+
+- **Laravel** 12.0
+- **MySQL/PostgreSQL/SQLite** (база данных)
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### Frontend
+- **Blade Templates** (шаблонизатор Laravel)
+- **Tailwind CSS** 4.0
+- **Vite** 7.0 (сборка фронтенда)
+- **Axios** (HTTP-клиент)
 
-## Code of Conduct
+### Внешние сервисы
+- **Yandex GPT API** — анализ писем и генерация ответов
+- **Yandex Vector Store** — векторный поиск для контекстного анализа
+- **IMAP** — получение писем с почтовых серверов
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### Основные пакеты
+- `webklex/laravel-imap` — работа с IMAP
+- `pusher/pusher-php-server` — real-time события
+- `laravel/tinker` — интерактивная консоль
 
-## Security Vulnerabilities
+## 🚀 Установка и настройка
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### Требования
 
-## License
+- PHP 8.2 или выше
+- Composer
+- Node.js и npm
+- База данных (MySQL, PostgreSQL или SQLite)
+- Расширения PHP: `pdo`, `pdo_mysql`, `mbstring`, `openssl`, `json`, `curl`
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+### Шаги установки
+
+1. **Клонирование репозитория**
+   ```bash
+   git clone https://github.com/danilaloko/psb_laravel.git
+   cd psb_laravel
+   ```
+
+2. **Установка зависимостей PHP**
+   ```bash
+   composer install
+   ```
+
+3. **Установка зависимостей Node.js**
+   ```bash
+   npm install
+   ```
+
+4. **Настройка окружения**
+   ```bash
+   cp .env.example .env
+   php artisan key:generate
+   ```
+
+5. **Настройка `.env` файла**
+   
+   Обязательные параметры:
+   ```env
+   # База данных
+   DB_CONNECTION=mysql
+   DB_HOST=127.0.0.1
+   DB_PORT=3306
+   DB_DATABASE=psb_laravel
+   DB_USERNAME=your_username
+   DB_PASSWORD=your_password
+
+   # Yandex Cloud (для AI)
+   YANDEX_IAM_TOKEN=your_iam_token
+   YANDEX_FOLDER_ID=your_folder_id
+
+   # IMAP (для получения писем)
+   IMAP_HOST=imap.example.com
+   IMAP_PORT=993
+   IMAP_USERNAME=email@example.com
+   IMAP_PASSWORD=your_password
+   IMAP_ENCRYPTION=ssl
+
+   # Очереди
+   QUEUE_CONNECTION=database
+   ```
+
+6. **Выполнение миграций**
+   ```bash
+   php artisan migrate
+   ```
+
+7. **Заполнение базы тестовыми данными (опционально)**
+   ```bash
+   php artisan db:seed
+   ```
+
+8. **Сборка фронтенда**
+   ```bash
+   npm run build
+   ```
+
+### Быстрая установка
+
+Проект включает скрипт для автоматической установки:
+
+```bash
+composer run setup
+```
+
+Этот скрипт выполнит все необходимые шаги установки автоматически.
+
+## 🎮 Использование
+
+### Запуск в режиме разработки
+
+Для запуска всех необходимых процессов одновременно:
+
+```bash
+composer run dev
+```
+
+Эта команда запустит:
+- Laravel development server (`php artisan serve`)
+- Queue worker (`php artisan queue:listen`)
+- Laravel Pail (логи в реальном времени)
+- Vite dev server (`npm run dev`)
+
+### Запуск отдельных компонентов
+
+**Веб-сервер:**
+```bash
+php artisan serve
+```
+
+**Обработчик очередей (обязательно для работы AI-обработки):**
+```bash
+php artisan queue:work
+```
+
+**Vite dev server (для разработки фронтенда):**
+```bash
+npm run dev
+```
+
+### Создание первого пользователя
+
+После установки создайте первого администратора через Tinker:
+
+```bash
+php artisan tinker
+```
+
+```php
+$user = \App\Models\User::create([
+    'name' => 'Admin',
+    'email' => 'admin@example.com',
+    'password' => bcrypt('password'),
+    'is_admin' => true,
+]);
+```
+
+## 📁 Структура проекта
+
+```
+psb_laravel/
+├── app/
+│   ├── Console/Commands/     # Artisan команды
+│   ├── Events/               # События приложения
+│   ├── Http/Controllers/     # HTTP контроллеры
+│   ├── Jobs/                 # Очередь задач (Jobs)
+│   │   ├── ProcessEmailWithAI.php      # Анализ писем
+│   │   ├── GenerateThreadReply.php     # Генерация ответов
+│   │   └── CreateTasksFromAnalysis.php # Создание задач
+│   ├── Models/               # Eloquent модели
+│   ├── Services/             # Бизнес-логика
+│   │   ├── YandexAIService.php         # Интеграция с Yandex AI
+│   │   ├── EmailFetcherService.php     # Получение писем через IMAP
+│   │   └── XpasteService.php           # Интеграция с Xpaste
+│   └── Providers/            # Service Providers
+├── config/
+│   ├── ai-models.php         # Конфигурация AI моделей
+│   ├── imap.php              # Настройки IMAP
+│   └── services.php          # Настройки внешних сервисов
+├── database/
+│   ├── migrations/           # Миграции БД
+│   └── seeders/              # Сидеры для тестовых данных
+├── resources/
+│   ├── views/                # Blade шаблоны
+│   ├── css/                  # CSS файлы
+│   └── js/                   # JavaScript файлы
+├── routes/
+│   └── web.php               # Веб-маршруты
+├── tests/                    # Тесты
+├── architecture.mmd          # Диаграмма архитектуры
+├── data-model.mmd            # ER-диаграмма базы данных
+└── email-processing-sequence.mmd  # Диаграмма последовательности
+```
+
+## 🔄 Процесс обработки писем
+
+1. **Получение письма**
+   - Письмо создается через API или получается через IMAP
+   - Создается запись в таблице `emails` и связь с `threads`
+
+2. **Анализ AI**
+   - Задача `ProcessEmailWithAI` ставится в очередь
+   - Выполняется поиск в Vector Store (если указан индекс)
+   - Формируется промпт с контекстом письма и результатами поиска
+   - Отправляется запрос в Yandex GPT API
+   - Результаты сохраняются в таблице `generations`
+
+3. **Создание задач**
+   - На основе анализа автоматически создаются задачи
+   - Задачи привязываются к департаментам и пользователям
+   - Рассчитываются дедлайны на основе SLA
+
+4. **Генерация ответов**
+   - Пользователь может запросить генерацию ответа на письмо
+   - Учитывается контекст всей переписки в треде
+   - Генерируется профессиональный ответ с форматированием
+
+Подробная диаграмма последовательности доступна в `email-processing-sequence.mmd`.
+
+## 🗄️ Модель данных
+
+Основные сущности:
+
+- **Users** — пользователи системы (администраторы и обычные пользователи)
+- **Departments** — департаменты организации
+- **Threads** — цепочки переписки
+- **Emails** — отдельные письма в цепочках
+- **Tasks** — задачи, созданные на основе анализа писем
+- **Generations** — результаты AI-анализа и генерации ответов
+
+Подробная ER-диаграмма доступна в `data-model.mmd`.
+
+## 🔐 Аутентификация и роли
+
+Система поддерживает два типа пользователей:
+
+- **Администратор** (`is_admin = true`) — полный доступ ко всем функциям, включая админ-панель
+- **Пользователь** (`is_admin = false`) — доступ к дашборду с назначенными задачами
+
+## ⚙️ Конфигурация AI моделей
+
+Настройки моделей Yandex GPT находятся в `config/ai-models.php`:
+
+- **gpt-5.1-pro** (по умолчанию) — основная модель для анализа
+- **gpt-pro** — альтернативная модель
+- **gpt-lite** — легкая модель для простых задач
+- **foundation-pro** — модель Foundation Models
+
+Каждая модель имеет свои параметры:
+- `temperature` — креативность ответов
+- `max_tokens` — максимальная длина ответа
+- `endpoint` — URL API
+
+## 📡 API Endpoints
+
+### Аутентификация
+- `GET /login` — форма входа
+- `POST /login` — авторизация
+- `POST /logout` — выход
+
+### Дашборд пользователя
+- `GET /dashboard` — главная страница дашборда
+- `GET /dashboard/task/{task}` — просмотр задачи
+- `POST /dashboard/task/{task}/status` — обновление статуса задачи
+- `POST /dashboard/task/{task}/analyze-latest-email` — анализ последнего письма
+- `GET /dashboard/task/{task}/analysis-status` — статус анализа
+- `POST /dashboard/task/{task}/generate-reply` — генерация ответа
+- `GET /dashboard/task/{task}/reply-status` — статус генерации ответа
+
+### Админ-панель
+- `GET /admin/dashboard` — админ-дашборд
+- `POST /admin/emails` — создание письма
+- `POST /admin/emails/process-incoming` — обработка входящих писем
+- `POST /admin/emails/{email}/analyze` — анализ письма
+- `GET /admin/emails/{email}/analysis` — просмотр анализа
+- `GET /admin/ai/stats` — статистика использования AI
+
+### Настройки
+- `GET /settings` — страница настроек (только для админов)
+- `POST /settings/departments` — создание департамента
+- `PUT /settings/departments/{department}` — обновление департамента
+- `DELETE /settings/departments/{department}` — удаление департамента
+- `POST /settings/users` — создание пользователя
+
+## 🧪 Тестирование
+
+Запуск тестов:
+
+```bash
+composer run test
+```
+
+Или напрямую:
+
+```bash
+php artisan test
+```
+
+## 📝 Команды Artisan
+
+### Обработка писем
+```bash
+# Тестовая обработка письма
+php artisan test:ai-processing {email_id}
+```
+
+### Очереди
+```bash
+# Запуск обработчика очередей
+php artisan queue:work
+
+# Просмотр неудачных задач
+php artisan queue:failed
+
+# Повторная обработка неудачных задач
+php artisan queue:retry all
+```
+
+## 🔧 Разработка
+
+### Code Style
+
+Проект использует Laravel Pint для форматирования кода:
+
+```bash
+./vendor/bin/pint
+```
+
+### Логирование
+
+Логи приложения находятся в `storage/logs/laravel.log`. Для просмотра в реальном времени:
+
+```bash
+php artisan pail
+```
+
+### Отладка
+
+Для интерактивной отладки используйте Tinker:
+
+```bash
+php artisan tinker
+```
+
+## 🐛 Решение проблем
+
+### Очереди не обрабатываются
+
+Убедитесь, что запущен worker:
+```bash
+php artisan queue:work
+```
+
+### Ошибки подключения к Yandex API
+
+Проверьте настройки в `.env`:
+- `YANDEX_IAM_TOKEN` — должен быть валидным IAM токеном
+- `YANDEX_FOLDER_ID` — ID каталога в Yandex Cloud
+
+### Проблемы с IMAP
+
+Проверьте настройки в `config/imap.php` и `.env`:
+- `IMAP_HOST`, `IMAP_PORT`, `IMAP_USERNAME`, `IMAP_PASSWORD`
+- Убедитесь, что сервер доступен и учетные данные корректны
+
+## 📄 Лицензия
+
+Проект использует лицензию MIT.
+
+## 👥 Авторы
+
+Разработано для автоматизации обработки корпоративной переписки.
+
+## 🔗 Полезные ссылки
+
+- [Документация Laravel](https://laravel.com/docs)
+- [Yandex Cloud AI](https://cloud.yandex.ru/docs/foundation-models/)
+- [Yandex Vector Store](https://cloud.yandex.ru/docs/yandexgpt/concepts/vector-store)
+
+---
+
+**Примечание**: Для полноценной работы системы необходимо настроить внешние сервисы (Yandex Cloud, IMAP сервер) и запустить обработчик очередей.
