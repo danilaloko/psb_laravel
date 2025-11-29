@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\Department;
 use App\Models\Email;
 use App\Models\Generation;
 use App\Services\YandexAIService;
@@ -200,9 +201,16 @@ class ProcessEmailWithAI implements ShouldQueue
             ? "\n\n{$searchContext}"
             : "";
 
+        // Получаем список департаментов
+        $departments = $this->getActiveDepartments();
+        $departmentsText = "";
+        foreach ($departments as $code => $name) {
+            $departmentsText .= "- {$code}: {$name}\n";
+        }
+
         return str_replace(
-            ['{email_content}', '{response_format}'],
-            [$emailContent, $searchSection . $this->getResponseFormat()],
+            ['{email_content}', '{departments}', '{response_format}'],
+            [$emailContent, $departmentsText, $searchSection . $this->getResponseFormat()],
             $template
         );
     }
@@ -215,13 +223,17 @@ class ProcessEmailWithAI implements ShouldQueue
 
             // Существующие параметры для обратной совместимости
             'summary' => 'string',
-            'priority' => 'high|medium|low',
             'category' => 'complaint|request|information|support',
             'sentiment' => 'positive|neutral|negative',
             'action_required' => 'boolean',
             'suggested_response' => 'string',
             'key_points' => 'array',
             'deadline' => 'ISO datetime or null',
+
+            // Новые поля для задач
+            'task_title' => 'string - краткое название задачи (3-7 слов)',
+            'department' => 'string - код департамента из списка: support, legal, credits, complaints, general',
+            'task_priority' => 'urgent|high|medium|low - приоритет задачи',
 
             // Многоуровневая классификация писем
             'classification' => [
@@ -295,6 +307,17 @@ class ProcessEmailWithAI implements ShouldQueue
                 'preventive_measures' => ['array of measures to prevent similar issues']
             ]
         ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    }
+
+    /**
+     * Получить список активных департаментов для передачи в промпт
+     */
+    protected function getActiveDepartments(): array
+    {
+        return Department::active()
+            ->orderBy('name')
+            ->pluck('name', 'code')
+            ->toArray();
     }
 
     protected function saveGeneration(array $parsedResponse, float $processingTime, array $modelConfig, array $apiResponse, ?array $searchResults = null): Generation
@@ -424,6 +447,36 @@ class ProcessEmailWithAI implements ShouldQueue
             ]);
         }
 
+        // Валидируем поле department
+        $validDepartments = array_keys($this->getActiveDepartments());
+        if (!isset($validated['department']) || !in_array($validated['department'], $validDepartments)) {
+            $validated['department'] = 'general'; // По умолчанию общий департамент
+            Log::warning('Invalid or missing department value, defaulting to "general"', [
+                'email_id' => $this->email->id,
+                'original_value' => $parsed['department'] ?? null,
+                'valid_departments' => $validDepartments
+            ]);
+        }
+
+        // Валидируем поле task_title
+        if (!isset($validated['task_title']) || !is_string($validated['task_title']) || strlen($validated['task_title']) < 3) {
+            $validated['task_title'] = 'Анализ входящего письма'; // По умолчанию
+            Log::warning('Invalid or missing task_title value, using default', [
+                'email_id' => $this->email->id,
+                'original_value' => $parsed['task_title'] ?? null
+            ]);
+        }
+
+        // Валидируем поле task_priority
+        $validPriorities = ['low', 'medium', 'high', 'urgent'];
+        if (!isset($validated['task_priority']) || !in_array($validated['task_priority'], $validPriorities)) {
+            $validated['task_priority'] = 'medium'; // По умолчанию средний приоритет
+            Log::warning('Invalid or missing task_priority value, defaulting to "medium"', [
+                'email_id' => $this->email->id,
+                'original_value' => $parsed['task_priority'] ?? null
+            ]);
+        }
+
         return $validated;
     }
 
@@ -435,13 +488,17 @@ class ProcessEmailWithAI implements ShouldQueue
 
             // Существующие параметры
             'summary' => 'Не удалось проанализировать письмо',
-            'priority' => 'medium',
             'category' => 'information',
             'sentiment' => 'neutral',
             'action_required' => true,
             'suggested_response' => 'Требуется ручная обработка',
             'key_points' => ['Анализ не удался'],
             'deadline' => null,
+
+            // Новые поля для задач
+            'task_title' => 'Анализ входящего письма',
+            'department' => 'general',
+            'task_priority' => 'medium',
 
             // Многоуровневая классификация
             'classification' => [
@@ -525,13 +582,17 @@ class ProcessEmailWithAI implements ShouldQueue
 
             // Минимальные поля для совместимости
             'summary' => 'Письмо помечено как спам или не соответствующее',
-            'priority' => 'low',
             'category' => 'information',
             'sentiment' => 'neutral',
             'action_required' => false,
             'suggested_response' => 'Не требует ответа',
             'key_points' => ['Спам или не соответствующее письмо'],
             'deadline' => null,
+
+            // Новые поля для задач (для спама - минимальные значения)
+            'task_title' => 'Спам или нерелевантное письмо',
+            'department' => 'general',
+            'task_priority' => 'low',
 
             // Пустые структуры для остальных полей
             'classification' => [

@@ -169,8 +169,12 @@ class TestAIProcessing extends Command
         $response = $generation->response;
 
         if (is_array($response)) {
+            // Новые поля для задач
+            $this->line("   📋 <info>Название задачи:</info> " . ($response['task_title'] ?? 'N/A'));
+            $this->line("   🏢 <info>Департамент:</info> " . ($response['department'] ?? 'N/A'));
+            $this->line("   🔥 <info>Приоритет задачи:</info> " . ($response['task_priority'] ?? 'N/A'));
+
             $this->line("   📝 <info>Краткое содержание:</info> " . ($response['summary'] ?? 'N/A'));
-            $this->line("   🔥 <info>Приоритет:</info> " . ($response['priority'] ?? 'N/A'));
             $this->line("   📂 <info>Категория:</info> " . ($response['category'] ?? 'N/A'));
             $this->line("   😊 <info>Тональность:</info> " . ($response['sentiment'] ?? 'N/A'));
             $this->line("   ⚡ <info>Требуется действие:</info> " . (($response['action_required'] ?? false) ? 'Да' : 'Нет'));
